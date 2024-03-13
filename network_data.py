@@ -58,6 +58,13 @@ class NetworkData:
     def update_model_with_candidate_solution(self, model, candidate_solution):
         _update_model_with_candidate_solution(self, model, candidate_solution)
 
+    def compute_primal_value(self, model):
+        obj = 0.0
+        for year in self.years:
+            for day in self.days:
+                obj += self.network[year][day].compute_objective_function_value(model[year][day], self.params) * self.years[year] * self.days[day]
+        return obj
+
     def process_results(self, model, results=dict()):
         return _process_results(self, model, results)
 

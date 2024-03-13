@@ -64,6 +64,9 @@ class SharedEnergyStorageData:
     def update_model_with_candidate_solution(self, model, candidate_solution):
         _update_model_with_candidate_solution(self, model, candidate_solution)
 
+    def compute_primal_value(self, model):
+        return _compute_primal_value(self, model)
+
     def get_sensitivities(self, model):
         return _get_sensitivities(model)
 
@@ -484,7 +487,7 @@ def _build_subproblem_model(shared_ess_data):
                             pdch = model.es_pdch[e, y, d, s_m, s_o, p]
                             pup = model.es_pup[e, y, d, s_m, s_o, p]
                             pdown = model.es_pdown[e, y, d, s_m, s_o, p]
-                            r_up_activ = r_activation_up[year][day][s_o][p]           # Share of downward reserve activation (Note: reversed, since reserve has a "generator" character)
+                            r_up_activ = r_activation_up[year][day][s_o][p]           # Share of downward reserve activation
                             r_down_activ = r_activation_down[year][day][s_o][p]       # Share of upward reserve activation
 
                             operational_cost += annualization * num_years * num_days * prob_market * prob_operation * c_p[year][day][s_m][p] * (pch - pdch)                      # Cost energy, active (positive)
@@ -582,6 +585,50 @@ def _update_model_with_candidate_solution(shared_ess_data, model, candidate_solu
             node_id = shared_ess_data.shared_energy_storages[year][e].bus
             model.es_s_invesment_fixed[e, y].fix(candidate_solution[node_id][year]['s'])
             model.es_e_invesment_fixed[e, y].fix(candidate_solution[node_id][year]['e'])
+
+
+def _compute_primal_value(shared_ess_data, model):
+
+    repr_days = [day for day in shared_ess_data.days]
+    repr_years = [year for year in shared_ess_data.years]
+
+    obj = 0.0
+    c_p = shared_ess_data.cost_energy_p
+    c_r_sec = shared_ess_data.cost_secondary_reserve
+    c_r_ter_up = shared_ess_data.cost_tertiary_reserve_up
+    c_r_ter_down = shared_ess_data.cost_tertiary_reserve_down
+    r_activation_up = shared_ess_data.upward_activation
+    r_activation_down = shared_ess_data.downward_activation
+    for e in model.energy_storages:
+        for y in model.years:
+
+            year = repr_years[y]
+            num_years = shared_ess_data.years[year]
+
+            # Annualization -- discount factor
+            annualization = 1 / ((1 + shared_ess_data.discount_factor) ** (int(year) - int(repr_years[0])))
+
+            # Operational Cost
+            for d in model.days:
+                day = repr_days[d]
+                num_days = shared_ess_data.days[day]
+                for s_m in model.scenarios_market:
+                    prob_market = shared_ess_data.prob_market_scenarios[s_m]
+                    for s_o in model.scenarios_operation:
+                        prob_operation = shared_ess_data.prob_operation_scenarios[s_o]
+                        for p in model.periods:
+                            pch = pe.value(model.es_pch[e, y, d, s_m, s_o, p])
+                            pdch = pe.value(model.es_pdch[e, y, d, s_m, s_o, p])
+                            pup = pe.value(model.es_pup[e, y, d, s_m, s_o, p])
+                            pdown = pe.value(model.es_pdown[e, y, d, s_m, s_o, p])
+                            r_up_activ = r_activation_up[year][day][s_o][p]         # Share of upward reserve activation
+                            r_down_activ = r_activation_down[year][day][s_o][p]     # Share of downward reserve activation
+                            obj += annualization * num_years * num_days * prob_market * prob_operation * c_p[year][day][s_m][p] * (pch - pdch)                     # Cost energy, active (positive)
+                            obj -= annualization * num_years * num_days * prob_market * prob_operation * c_r_sec[year][day][s_m][p] * (pup + pdown)                # Revenue secondary reserve (negative)
+                            obj -= annualization * num_years * num_days * prob_market * prob_operation * (c_r_ter_up[year][day][s_m][p] * pup * r_up_activ)        # Revenue secondary reserve upward activation (negative)
+                            obj -= annualization * num_years * num_days * prob_market * prob_operation * (c_r_ter_down[year][day][s_m][p] * pdown * r_down_activ)  # Revenue secondary reserve downward activation (negative)
+
+    return obj
 
 
 def _get_sensitivities(model):
