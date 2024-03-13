@@ -67,6 +67,15 @@ class SharedEnergyStorageData:
     def get_sensitivities(self, model):
         return _get_sensitivities(model)
 
+    def get_shared_energy_storage_idx(self, node_id):
+        repr_years = [year for year in self.years]
+        for i in range(len(self.shared_energy_storages[repr_years[0]])):
+            shared_energy_storage = self.shared_energy_storages[repr_years[0]][i]
+            if shared_energy_storage.bus == node_id:
+                return i
+        print(f'[ERROR] Network {self.name}. Node {node_id} does not have a shared energy storage system! Check network.')
+        exit(ERROR_NETWORK_FILE)
+
 
 # ======================================================================================================================
 #  OPERATIONAL PLANNING functions
