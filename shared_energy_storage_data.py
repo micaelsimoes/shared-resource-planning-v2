@@ -64,6 +64,9 @@ class SharedEnergyStorageData:
     def update_model_with_candidate_solution(self, model, candidate_solution):
         _update_model_with_candidate_solution(self, model, candidate_solution)
 
+    def get_sensitivities(self, model):
+        return _get_sensitivities(model)
+
 
 # ======================================================================================================================
 #  OPERATIONAL PLANNING functions
@@ -570,6 +573,21 @@ def _update_model_with_candidate_solution(shared_ess_data, model, candidate_solu
             node_id = shared_ess_data.shared_energy_storages[year][e].bus
             model.es_s_invesment_fixed[e, y].fix(candidate_solution[node_id][year]['s'])
             model.es_e_invesment_fixed[e, y].fix(candidate_solution[node_id][year]['e'])
+
+
+def _get_sensitivities(model):
+
+    sensitivities = dict()
+
+    sensitivities['s'] = list()
+    for c in model.sensitivities_s:
+        sensitivities['s'].append(pe.value(model.dual[model.sensitivities_s[c]]))
+
+    sensitivities['e'] = list()
+    for c in model.sensitivities_e:
+        sensitivities['e'].append(pe.value(model.dual[model.sensitivities_e[c]]))
+
+    return sensitivities
 
 
 # ======================================================================================================================
