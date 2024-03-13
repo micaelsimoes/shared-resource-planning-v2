@@ -1,7 +1,10 @@
 import os
+import time
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
+import pyomo.opt as po
+import pyomo.environ as pe
 from network_data import NetworkData
 from shared_energy_storage import SharedEnergyStorage
 from shared_energy_storage_data import SharedEnergyStorageData
@@ -48,11 +51,171 @@ class SharedResourcesPlanning:
         filename = os.path.join(self.data_dir, self.params_file)
         self.params.read_parameters_from_file(filename)
 
+    def run_operational_planning(self, candidate_solution=dict()):
+        print('[INFO] Running OPERATIONAL PLANNING...')
+        if not candidate_solution:
+            candidate_solution = self.get_initial_candidate_solution()
+        return _run_operational_planning(self, candidate_solution)
+
     def get_initial_candidate_solution(self):
         return _get_initial_candidate_solution(self)
 
     def plot_diagram(self):
         _plot_networkx_diagram(self)
+
+
+# ======================================================================================================================
+#  OPERATIONAL PLANNING functions
+# ======================================================================================================================
+def _run_operational_planning(planning_problem, candidate_solution):
+
+    transmission_network = planning_problem.transmission_network
+    distribution_networks = planning_problem.distribution_networks
+    shared_ess_data = planning_problem.shared_ess_data
+    admm_parameters = planning_problem.params.admm
+    results = {'tso': dict(), 'dso': dict(), 'esso': dict()}
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # 0. Initialization
+
+    print('[INFO]\t\t - Initializing...')
+
+    start = time.time()
+    from_warm_start = False
+    primal_evolution = list()
+
+    # Create ADMM variables
+    consensus_vars, dual_vars, consensus_vars_prev_iter = create_admm_variables(planning_problem)
+
+    # Create Operational Planning models
+    dso_models = create_distribution_networks_models(distribution_networks, consensus_vars['interface']['pf']['dso'], consensus_vars['ess']['dso'], candidate_solution['total_capacity'])
+    update_distribution_models_to_admm(distribution_networks, dso_models, consensus_vars['interface']['pf']['dso'], admm_parameters)
+
+
+def create_admm_variables(planning_problem):
+
+    num_instants = planning_problem.num_instants
+
+    consensus_variables = {
+        'interface': {
+            'v': dict(),
+            'pf': {'tso': dict(), 'dso': dict()}
+        },
+        'ess': {'tso': dict(), 'dso': dict(), 'esso': dict(), 'capacity': {'s': dict(), 'e': dict()}}
+    }
+
+    dual_variables = {
+        'pf': {'tso': dict(), 'dso': dict()},
+        'ess': {'tso': dict(), 'dso': dict()}
+    }
+
+    consensus_variables_prev_iter = {
+        'interface': {'pf': {'tso': dict(), 'dso': dict()}},
+        'ess': {'tso': dict(), 'dso': dict(), 'esso': dict()}
+    }
+
+    for dn in range(len(planning_problem.active_distribution_network_nodes)):
+
+        node_id = planning_problem.active_distribution_network_nodes[dn]
+
+        consensus_variables['interface']['v'][node_id] = dict()
+        consensus_variables['interface']['pf']['tso'][node_id] = dict()
+        consensus_variables['interface']['pf']['dso'][node_id] = dict()
+        consensus_variables['ess']['tso'][node_id] = dict()
+        consensus_variables['ess']['dso'][node_id] = dict()
+        consensus_variables['ess']['esso'][node_id] = dict()
+
+        dual_variables['pf']['tso'][node_id] = dict()
+        dual_variables['pf']['dso'][node_id] = dict()
+        dual_variables['ess']['tso'][node_id] = dict()
+        dual_variables['ess']['dso'][node_id] = dict()
+
+        consensus_variables_prev_iter['interface']['pf']['tso'][node_id] = dict()
+        consensus_variables_prev_iter['interface']['pf']['dso'][node_id] = dict()
+        consensus_variables_prev_iter['ess']['tso'][node_id] = dict()
+        consensus_variables_prev_iter['ess']['dso'][node_id] = dict()
+        consensus_variables_prev_iter['ess']['esso'][node_id] = dict()
+
+        for year in planning_problem.years:
+
+            consensus_variables['interface']['v'][node_id][year] = dict()
+            consensus_variables['interface']['pf']['tso'][node_id][year] = dict()
+            consensus_variables['interface']['pf']['dso'][node_id][year] = dict()
+            consensus_variables['ess']['tso'][node_id][year] = dict()
+            consensus_variables['ess']['dso'][node_id][year] = dict()
+            consensus_variables['ess']['esso'][node_id][year] = dict()
+
+            dual_variables['pf']['tso'][node_id][year] = dict()
+            dual_variables['pf']['dso'][node_id][year] = dict()
+            dual_variables['ess']['tso'][node_id][year] = dict()
+            dual_variables['ess']['dso'][node_id][year] = dict()
+
+            consensus_variables_prev_iter['interface']['pf']['tso'][node_id][year] = dict()
+            consensus_variables_prev_iter['interface']['pf']['dso'][node_id][year] = dict()
+            consensus_variables_prev_iter['ess']['tso'][node_id][year] = dict()
+            consensus_variables_prev_iter['ess']['dso'][node_id][year] = dict()
+            consensus_variables_prev_iter['ess']['esso'][node_id][year] = dict()
+
+            for day in planning_problem.days:
+
+                consensus_variables['interface']['v'][node_id][year][day] = [1.0] * num_instants
+                consensus_variables['interface']['pf']['tso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
+                consensus_variables['interface']['pf']['dso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
+                consensus_variables['ess']['tso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
+                consensus_variables['ess']['dso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
+                consensus_variables['ess']['esso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
+
+                dual_variables['pf']['tso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
+                dual_variables['pf']['dso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
+                dual_variables['ess']['tso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
+                dual_variables['ess']['dso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
+
+                consensus_variables_prev_iter['interface']['pf']['tso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
+                consensus_variables_prev_iter['interface']['pf']['dso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
+                consensus_variables_prev_iter['ess']['tso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
+                consensus_variables_prev_iter['ess']['dso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
+                consensus_variables_prev_iter['ess']['esso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
+
+    return consensus_variables, dual_variables, consensus_variables_prev_iter
+
+
+def create_distribution_networks_models(distribution_networks, interface_vars, sess_vars, candidate_solution):
+
+    dso_models = dict()
+
+    for node_id in distribution_networks:
+
+        distribution_network = distribution_networks[node_id]
+
+        # Build model, fix candidate solution, and Run S-MPOPF model
+        dso_model = distribution_network.build_model()
+        distribution_network.update_model_with_candidate_solution(dso_model, candidate_solution)
+        distribution_network.optimize(dso_model)
+
+        # Get initial interface PF values
+        for year in distribution_network.years:
+            for day in distribution_network.days:
+                s_base = distribution_network.network[year][day].baseMVA
+                for p in dso_model[year][day].periods:
+                    interface_pf_p = pe.value(dso_model[year][day].expected_interface_pf_p[p]) * s_base
+                    interface_pf_q = pe.value(dso_model[year][day].expected_interface_pf_q[p]) * s_base
+                    interface_vars[node_id][year][day]['p'][p] = interface_pf_p
+                    interface_vars[node_id][year][day]['q'][p] = interface_pf_q
+
+        # Get initial Shared ESS values
+        for year in distribution_network.years:
+            for day in distribution_network.days:
+                s_base = distribution_network.network[year][day].baseMVA
+                for p in dso_model[year][day].periods:
+                    p_ess = pe.value(dso_model[year][day].expected_shared_ess_p[p]) * s_base
+                    q_ess = pe.value(dso_model[year][day].expected_shared_ess_q[p]) * s_base
+                    sess_vars[node_id][year][day]['p'][p] = p_ess
+                    sess_vars[node_id][year][day]['q'][p] = q_ess
+
+        dso_models[node_id] = dso_model
+
+    return dso_models
+
 
 
 # ======================================================================================================================
