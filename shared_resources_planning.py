@@ -124,6 +124,15 @@ def _run_operational_planning(planning_problem, candidate_solution):
                                                          consensus_vars, dual_vars, consensus_vars_prev_iter,
                                                          admm_parameters)
 
+        # 2.2 Update primal evolution
+        primal_evolution.append(compute_primal_value(planning_problem, tso_model, dso_models, esso_model))
+
+        # 2.3 STOPPING CRITERIA evaluation
+        if iter >= 1:
+            convergence = check_admm_convergence(planning_problem, consensus_vars, consensus_vars_prev_iter, admm_parameters)
+            if convergence:
+                break
+
 
     if not convergence:
         print(f'[WARNING] ADMM did NOT converge in {admm_parameters.num_max_iters} iterations!')
@@ -633,10 +642,10 @@ def _update_interface_power_flow_variables(planning_problem, tso_model, dso_mode
                     error_p_pf = interface_vars['pf']['tso'][node_id][year][day]['p'][p] - interface_vars['pf']['dso'][node_id][year][day]['p'][p]
                     error_q_pf = interface_vars['pf']['tso'][node_id][year][day]['q'][p] - interface_vars['pf']['dso'][node_id][year][day]['q'][p]
 
-                    dual_vars['tso'][node_id][year][day]['p'][p] += params.rho[transmission_network.name] * (error_p_pf)
-                    dual_vars['tso'][node_id][year][day]['q'][p] += params.rho[transmission_network.name] * (error_q_pf)
-                    dual_vars['dso'][node_id][year][day]['p'][p] += params.rho[distribution_network.name] * (-error_p_pf)
-                    dual_vars['dso'][node_id][year][day]['q'][p] += params.rho[distribution_network.name] * (-error_q_pf)
+                    dual_vars['tso'][node_id][year][day]['p'][p] += params.rho['pf'][transmission_network.name] * (error_p_pf)
+                    dual_vars['tso'][node_id][year][day]['q'][p] += params.rho['pf'][transmission_network.name] * (error_q_pf)
+                    dual_vars['dso'][node_id][year][day]['p'][p] += params.rho['pf'][distribution_network.name] * (-error_p_pf)
+                    dual_vars['dso'][node_id][year][day]['q'][p] += params.rho['pf'][distribution_network.name] * (-error_q_pf)
 
                 '''
                 print(f"Ptso[{node_id},{year},{day}] = {interface_vars['pf']['tso'][node_id][year][day]['p']}")
@@ -703,9 +712,128 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
             for day in planning_problem.days:
                 for t in range(planning_problem.num_instants):
                     error_p_ess_transm = shared_ess_vars['tso'][node_id][year][day]['p'][t] - shared_ess_vars['esso'][node_id][year][day]['p'][t]
+                    error_q_ess_transm = shared_ess_vars['tso'][node_id][year][day]['q'][t] - shared_ess_vars['esso'][node_id][year][day]['q'][t]
                     error_p_ess_distr = shared_ess_vars['dso'][node_id][year][day]['p'][t] - shared_ess_vars['esso'][node_id][year][day]['p'][t]
-                    dual_vars['tso'][node_id][year][day]['p'][t] += params.rho['ESSO'] * (error_p_ess_transm)
-                    dual_vars['dso'][node_id][year][day]['p'][t] += params.rho['ESSO'] * (error_p_ess_distr)
+                    error_q_ess_distr = shared_ess_vars['dso'][node_id][year][day]['q'][t] - shared_ess_vars['esso'][node_id][year][day]['q'][t]
+                    dual_vars['tso'][node_id][year][day]['p'][t] += params.rho['ess']['esso'] * (error_p_ess_transm)
+                    dual_vars['tso'][node_id][year][day]['q'][t] += params.rho['ess']['esso'] * (error_q_ess_transm)
+                    dual_vars['dso'][node_id][year][day]['p'][t] += params.rho['ess']['esso'] * (error_p_ess_distr)
+                    dual_vars['dso'][node_id][year][day]['q'][t] += params.rho['ess']['esso'] * (error_q_ess_distr)
+
+
+def compute_primal_value(planning_problem, tso_model, dso_models, esso_model):
+
+    transmission_network = planning_problem.transmission_network
+    distribution_networks = planning_problem.distribution_networks
+    shared_ess_data = planning_problem.shared_ess_data
+
+    primal_value = 0.0
+    primal_value += transmission_network.compute_primal_value(tso_model)
+    for node_id in distribution_networks:
+        primal_value += distribution_networks[node_id].compute_primal_value(dso_models[node_id])
+    if esso_model:
+        primal_value += shared_ess_data.compute_primal_value(esso_model)
+
+    return primal_value
+
+
+def check_admm_convergence(planning_problem, consensus_vars, consensus_vars_prev_iter, params):
+    if consensus_convergence(planning_problem, consensus_vars, params):
+        if stationary_convergence(planning_problem, consensus_vars, consensus_vars_prev_iter, params):
+            return True
+    return False
+
+
+def consensus_convergence(planning_problem, consensus_vars, params):
+
+    interface_vars = consensus_vars['interface']['pf']
+    shared_ess_vars = consensus_vars['ess']
+    sum_abs = 0.0
+    num_elems = 0
+
+    for year in planning_problem.years:
+        for day in planning_problem.days:
+
+            # Interface Power Flow
+            for node_id in planning_problem.active_distribution_network_nodes:
+                for p in range(planning_problem.num_instants):
+                    sum_abs += abs(round(interface_vars['tso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(interface_vars['dso'][node_id][year][day]['p'][p], ERROR_PRECISION))
+                    sum_abs += abs(round(interface_vars['tso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(interface_vars['dso'][node_id][year][day]['q'][p], ERROR_PRECISION))
+                    sum_abs += abs(round(interface_vars['dso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(interface_vars['tso'][node_id][year][day]['p'][p], ERROR_PRECISION))
+                    sum_abs += abs(round(interface_vars['dso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(interface_vars['tso'][node_id][year][day]['q'][p], ERROR_PRECISION))
+                    num_elems += 4
+
+            # Shared Energy Storage
+            for node_id in planning_problem.active_distribution_network_nodes:
+                for p in range(planning_problem.num_instants):
+                    sum_abs += abs(round(shared_ess_vars['tso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars['esso'][node_id][year][day]['p'][p], ERROR_PRECISION))
+                    sum_abs += abs(round(shared_ess_vars['tso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars['esso'][node_id][year][day]['q'][p], ERROR_PRECISION))
+                    sum_abs += abs(round(shared_ess_vars['esso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars['tso'][node_id][year][day]['p'][p], ERROR_PRECISION))
+                    sum_abs += abs(round(shared_ess_vars['esso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars['tso'][node_id][year][day]['q'][p], ERROR_PRECISION))
+                    sum_abs += abs(round(shared_ess_vars['dso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars['esso'][node_id][year][day]['p'][p], ERROR_PRECISION))
+                    sum_abs += abs(round(shared_ess_vars['dso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars['esso'][node_id][year][day]['q'][p], ERROR_PRECISION))
+                    sum_abs += abs(round(shared_ess_vars['esso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars['dso'][node_id][year][day]['p'][p], ERROR_PRECISION))
+                    sum_abs += abs(round(shared_ess_vars['esso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars['dso'][node_id][year][day]['q'][p], ERROR_PRECISION))
+                    num_elems += 8
+
+    if sum_abs > params.tol * num_elems:
+        if not isclose(sum_abs, params.tol * num_elems, rel_tol=ADMM_CONVERGENCE_REL_TOL, abs_tol=params.tol):
+            print('[INFO]\t\t - Convergence consensus constraints failed. {:.3f} > {:.3f}'.format(sum_abs, params.tol * num_elems))
+            return False
+        print('[INFO]\t\t - Convergence consensus constraints considered ok. {:.3f} ~= {:.3f}'.format(sum_abs, params.tol * num_elems))
+        return True
+
+    print('[INFO]\t\t - Convergence consensus constraints ok. {:.3f} <= {:.3f}'.format(sum_abs, params.tol * num_elems))
+    return True
+
+
+def stationary_convergence(planning_problem, consensus_vars, consensus_vars_prev_iter, params):
+
+    rho_esso = params.rho['ess']['esso']
+    rho_tso = params.rho[planning_problem.transmission_network.name]
+    interface_vars = consensus_vars['interface']['pf']
+    shared_ess_vars = consensus_vars['ess']
+    interface_vars_prev_iter = consensus_vars_prev_iter['interface']['pf']
+    shared_ess_vars_prev_iter = consensus_vars_prev_iter['ess']
+    sum_abs = 0.0
+    num_elems = 0
+
+    # Interface Power Flow
+    for node_id in planning_problem.distribution_networks:
+        rho_dso = params.rho['pf'][planning_problem.distribution_networks[node_id].name]
+        for year in planning_problem.years:
+            for day in planning_problem.days:
+                for p in range(planning_problem.num_instants):
+                    sum_abs += rho_tso * abs(round(interface_vars['tso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(interface_vars_prev_iter['tso'][node_id][year][day]['p'][p], ERROR_PRECISION))
+                    sum_abs += rho_tso * abs(round(interface_vars['tso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(interface_vars_prev_iter['tso'][node_id][year][day]['q'][p], ERROR_PRECISION))
+                    sum_abs += rho_dso * abs(round(interface_vars['dso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(interface_vars_prev_iter['dso'][node_id][year][day]['p'][p], ERROR_PRECISION))
+                    sum_abs += rho_dso * abs(round(interface_vars['dso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(interface_vars_prev_iter['dso'][node_id][year][day]['q'][p], ERROR_PRECISION))
+                    num_elems += 4
+
+    # Shared Energy Storage
+    for node_id in planning_problem.distribution_networks:
+        distribution_network = planning_problem.distribution_networks[node_id]
+        for year in planning_problem.years:
+            for day in planning_problem.days:
+                rho_dso = params.rho['ess'][distribution_network.network[year][day].name]
+                for p in range(planning_problem.num_instants):
+                    sum_abs += rho_tso * abs(round(shared_ess_vars['tso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['tso'][node_id][year][day]['p'][p], ERROR_PRECISION))
+                    sum_abs += rho_tso * abs(round(shared_ess_vars['tso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['tso'][node_id][year][day]['q'][p], ERROR_PRECISION))
+                    sum_abs += rho_dso * abs(round(shared_ess_vars['dso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['dso'][node_id][year][day]['p'][p], ERROR_PRECISION))
+                    sum_abs += rho_dso * abs(round(shared_ess_vars['dso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['dso'][node_id][year][day]['q'][p], ERROR_PRECISION))
+                    sum_abs += rho_esso * abs(round(shared_ess_vars['esso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['esso'][node_id][year][day]['p'][p], ERROR_PRECISION))
+                    sum_abs += rho_esso * abs(round(shared_ess_vars['esso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['esso'][node_id][year][day]['q'][p], ERROR_PRECISION))
+                    num_elems += 6
+
+    if sum_abs > params.tol * num_elems:
+        if not isclose(sum_abs, params.tol * num_elems, rel_tol=ADMM_CONVERGENCE_REL_TOL, abs_tol=params.tol):
+            print('[INFO]\t\t - Convergence stationary constraints failed. {:.3f} > {:.3f}'.format(sum_abs, params.tol * num_elems))
+            return False
+        print('[INFO]\t\t - Convergence stationary constraints considered ok. {:.3f} ~= {:.3f}'.format(sum_abs, params.tol * num_elems))
+        return True
+
+    print('[INFO]\t\t - Convergence stationary constraints ok. {:.3f} <= {:.3f}'.format(sum_abs, params.tol * num_elems))
+    return True
 
 
 # ======================================================================================================================
