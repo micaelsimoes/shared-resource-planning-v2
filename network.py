@@ -168,6 +168,9 @@ class Network:
     def process_results(self, model, params, results=dict()):
         return _process_results(self, model, params, results=results)
 
+    def process_results_interface_power_flow(self, model):
+        return _process_results_interface_power_flow(self, model)
+
     def plot_diagram(self):
         _plot_networkx_diagram(self)
 

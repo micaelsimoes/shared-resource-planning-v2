@@ -68,6 +68,14 @@ class NetworkData:
     def process_results(self, model, results=dict()):
         return _process_results(self, model, results)
 
+    def process_results_interface_power_flow(self, model):
+        results = dict()
+        for year in self.years:
+            results[year] = dict()
+            for day in self.days:
+                results[year][day] = self.network[year][day].process_results_interface_power_flow(model[year][day])
+        return results
+
     def write_optimization_results_to_excel(self, results):
         _write_optimization_results_to_excel(self, self.results_dir, results)
 

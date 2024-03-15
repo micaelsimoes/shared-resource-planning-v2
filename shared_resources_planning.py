@@ -1,6 +1,8 @@
 import os
 import time
 from copy import copy
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill
 import pandas as pd
 from math import sqrt, isclose
 import networkx as nx
@@ -53,17 +55,25 @@ class SharedResourcesPlanning:
         filename = os.path.join(self.data_dir, self.params_file)
         self.params.read_parameters_from_file(filename)
 
-    def run_operational_planning(self, candidate_solution=dict()):
+    def run_operational_planning(self, candidate_solution=dict(), print_results=False):
         print('[INFO] Running OPERATIONAL PLANNING...')
         if not candidate_solution:
             candidate_solution = self.get_initial_candidate_solution()
-        return _run_operational_planning(self, candidate_solution)
+        results, models, sensitivities, primal_evolution = _run_operational_planning(self, candidate_solution)
+        if print_results:
+            self.write_operational_planning_results_to_excel(models, results, primal_evolution)
+        return results, models, sensitivities, primal_evolution
 
     def update_admm_consensus_variables(self, tso_model, dso_models, esso_model, consensus_vars, dual_vars, consensus_vars_prev_iter, params):
         _update_admm_consensus_variables(self, tso_model, dso_models, esso_model, consensus_vars, dual_vars, consensus_vars_prev_iter, params)
 
     def get_initial_candidate_solution(self):
         return _get_initial_candidate_solution(self)
+
+    def write_operational_planning_results_to_excel(self, optimization_models, results, primal_evolution=list()):
+        filename = os.path.join(self.results_dir, self.name + '_operational_planning_results.xlsx')
+        processed_results = _process_operational_planning_results(self, optimization_models['tso'], optimization_models['dso'], optimization_models['esso'], results)
+        _write_operational_planning_results_to_excel(self, processed_results, primal_evolution=primal_evolution, filename=filename)
 
     def plot_diagram(self):
         _plot_networkx_diagram(self)
@@ -189,7 +199,7 @@ def _run_operational_planning(planning_problem, candidate_solution):
     total_execution_time = end - start
     print('[INFO] \t - Execution time: {:.2f} s'.format(total_execution_time))
 
-    optim_models = {'tso': tso_model, 'dso': dso_models}
+    optim_models = {'tso': tso_model, 'dso': dso_models, 'esso': esso_model}
     sensitivities = shared_ess_data.get_sensitivities(esso_model)
 
     return results, optim_models, sensitivities, primal_evolution
@@ -1221,6 +1231,3747 @@ def _plot_networkx_diagram(planning_problem):
             filename = os.path.join(planning_problem.diagrams_dir, f'{planning_problem.name}_{year}_{day}')
             plt.savefig(f'{filename}.pdf', bbox_inches='tight')
             plt.savefig(f'{filename}.png', bbox_inches='tight')
+
+
+# ======================================================================================================================
+#  RESULTS PROCESSING functions
+# ======================================================================================================================
+def _process_operational_planning_results(operational_planning_problem, tso_model, dso_models, esso_model, optimization_results):
+
+    transmission_network = operational_planning_problem.transmission_network
+    distribution_networks = operational_planning_problem.distribution_networks
+    shared_ess_data = operational_planning_problem.shared_ess_data
+
+    processed_results = dict()
+    processed_results['tso'] = dict()
+    processed_results['dso'] = dict()
+    processed_results['esso'] = dict()
+    processed_results['interface'] = dict()
+
+    processed_results['tso'] = transmission_network.process_results(tso_model, optimization_results['tso'])
+    for node_id in distribution_networks:
+        dso_model = dso_models[node_id]
+        distribution_network = distribution_networks[node_id]
+        processed_results['dso'][node_id] = distribution_network.process_results(dso_model, optimization_results['dso'][node_id])
+    processed_results['esso'] = shared_ess_data.process_results(esso_model)
+    processed_results['interface'] = _process_results_interface_power_flow(operational_planning_problem, tso_model, dso_models)
+
+    return processed_results
+
+
+def _process_results_interface_power_flow(planning_problem, tso_model, dso_models):
+
+    transmission_network = planning_problem.transmission_network
+    distribution_networks = planning_problem.distribution_networks
+
+    processed_results = dict()
+    processed_results['tso'] = dict()
+    processed_results['dso'] = dict()
+
+    processed_results['tso'] = transmission_network.process_results_interface_power_flow(tso_model)
+    for node_id in distribution_networks:
+        dso_model = dso_models[node_id]
+        distribution_network = distribution_networks[node_id]
+        processed_results['dso'][node_id] = distribution_network.process_results_interface_power_flow(dso_model)
+
+    return processed_results
+
+
+# ======================================================================================================================
+#  RESULTS OPERATIONAL PLANNING - write functions
+# ======================================================================================================================
+def _write_operational_planning_results_to_excel(planning_problem, results, primal_evolution=list(), filename='operation_planning_results'):
+
+    wb = Workbook()
+
+    _write_operational_planning_main_info_to_excel(planning_problem, wb, results)
+    _write_shared_ess_specifications(wb, planning_problem.shared_ess_data)
+
+    if primal_evolution:
+        _write_objective_function_evolution_to_excel(wb, primal_evolution)
+
+    # Interface Power Flow
+    _write_interface_power_flow_results_to_excel(planning_problem, wb, results['interface'])
+
+    # Shared Energy Storages results
+    _write_shared_energy_storages_results_to_excel(planning_problem, wb, results)
+
+    #  TSO and DSOs' results
+    _write_network_voltage_results_to_excel(planning_problem, wb, results)
+    _write_network_consumption_results_to_excel(planning_problem, wb, results)
+    _write_network_generation_results_to_excel(planning_problem, wb, results)
+    _write_network_branch_results_to_excel(planning_problem, wb, results, 'losses')
+    _write_network_branch_results_to_excel(planning_problem, wb, results, 'ratio')
+    _write_network_branch_results_to_excel(planning_problem, wb, results, 'current_perc')
+    _write_network_branch_power_flow_results_to_excel(planning_problem, wb, results)
+    _write_network_energy_storages_results_to_excel(planning_problem, wb, results)
+    _write_relaxation_slacks_results_to_excel(planning_problem, wb, results)
+
+    # Save results
+    try:
+        wb.save(filename)
+    except:
+        from datetime import datetime
+        now = datetime.now()
+        current_time = now.strftime("%Y-%m-%d_%H-%M-%S")
+        backup_filename = f"{filename.replace('.xlsx', '')}_{current_time}.xlsx"
+        print(f"[WARNING] Results saved to file {backup_filename}.xlsx")
+        wb.save(backup_filename)
+
+
+def _write_operational_planning_main_info_to_excel(planning_problem, workbook, results):
+
+    sheet = workbook.worksheets[0]
+    sheet.title = 'Main Info'
+
+    decimal_style = '0.00'
+    line_idx = 1
+
+    # Write Header
+    col_idx = 4
+    for year in planning_problem.years:
+        for _ in planning_problem.days:
+            sheet.cell(row=line_idx, column=col_idx).value = year
+            col_idx += 1
+
+    col_idx = 1
+    line_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = 'Agent'
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = 'Node ID'
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = 'Value'
+    col_idx += 1
+
+    for _ in planning_problem.years:
+        for day in planning_problem.days:
+            sheet.cell(row=line_idx, column=col_idx).value = day
+            col_idx += 1
+
+    # ESSO
+    if 'esso' in results:
+        line_idx += 1
+        col_idx = 1
+        sheet.cell(row=line_idx, column=col_idx).value = 'ESSO'
+        col_idx += 1
+        sheet.cell(row=line_idx, column=col_idx).value = '-'
+        col_idx += 1
+        sheet.cell(row=line_idx, column=col_idx).value = 'Objective (cost), [€]'
+        col_idx += 1
+        for year in results['esso']['results']:
+            for day in results['esso']['results'][year]:
+                sheet.cell(row=line_idx, column=col_idx).value = results['esso']['results'][year][day]['obj']
+                sheet.cell(row=line_idx, column=col_idx).number_format = decimal_style
+                col_idx += 1
+
+    # TSO
+    line_idx = _write_operational_planning_main_info_per_operator(planning_problem.transmission_network, sheet, 'TSO', line_idx, results['tso']['results'])
+
+    # DSOs
+    for tn_node_id in results['dso']:
+        dso_results = results['dso'][tn_node_id]['results']
+        distribution_network = planning_problem.distribution_networks[tn_node_id]
+        line_idx = _write_operational_planning_main_info_per_operator(distribution_network, sheet, 'DSO', line_idx, dso_results, tn_node_id=tn_node_id)
+
+
+def _write_operational_planning_main_info_per_operator(network, sheet, operator_type, line_idx, results, tn_node_id='-'):
+
+    decimal_style = '0.00'
+
+    line_idx += 1
+    col_idx = 1
+    sheet.cell(row=line_idx, column=col_idx).value = operator_type
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = tn_node_id
+    col_idx += 1
+
+    # - Objective
+    obj_string = 'Objective'
+    if network.params.obj_type == OBJ_MIN_COST:
+        obj_string += ' (cost), [€]'
+    elif network.params.obj_type == OBJ_CONGESTION_MANAGEMENT:
+        obj_string += ' (congestion management)'
+    sheet.cell(row=line_idx, column=col_idx).value = obj_string
+    col_idx += 1
+    for year in results:
+        for day in results[year]:
+            sheet.cell(row=line_idx, column=col_idx).value = results[year][day]['obj']
+            sheet.cell(row=line_idx, column=col_idx).number_format = decimal_style
+            col_idx += 1
+
+    # Total Load
+    line_idx += 1
+    col_idx = 1
+    sheet.cell(row=line_idx, column=col_idx).value = operator_type
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = tn_node_id
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = 'Load, [MWh]'
+    col_idx += 1
+    for year in results:
+        for day in results[year]:
+            load_aux = results[year][day]['total_load']
+            if network.params.l_curt:
+                load_aux -= results[year][day]['load_curt']
+            sheet.cell(row=line_idx, column=col_idx).value = load_aux
+            sheet.cell(row=line_idx, column=col_idx).number_format = decimal_style
+            col_idx += 1
+
+    # Flexibility used
+    if network.params.fl_reg:
+        line_idx += 1
+        col_idx = 1
+        sheet.cell(row=line_idx, column=col_idx).value = operator_type
+        col_idx += 1
+        sheet.cell(row=line_idx, column=col_idx).value = tn_node_id
+        col_idx += 1
+        sheet.cell(row=line_idx, column=col_idx).value = 'Flexibility used, [MWh]'
+        col_idx += 1
+        for year in results:
+            for day in results[year]:
+                sheet.cell(row=line_idx, column=col_idx).value = results[year][day]['flex_used']
+                sheet.cell(row=line_idx, column=col_idx).number_format = decimal_style
+                col_idx += 1
+
+    # Total Load curtailed
+    if network.params.l_curt:
+        line_idx += 1
+        col_idx = 1
+        sheet.cell(row=line_idx, column=col_idx).value = operator_type
+        col_idx += 1
+        sheet.cell(row=line_idx, column=col_idx).value = tn_node_id
+        col_idx += 1
+        sheet.cell(row=line_idx, column=col_idx).value = 'Load curtailed, [MWh]'
+        col_idx += 1
+        for year in results:
+            for day in results[year]:
+                sheet.cell(row=line_idx, column=col_idx).value = results[year][day]['load_curt']
+                sheet.cell(row=line_idx, column=col_idx).number_format = decimal_style
+                col_idx += 1
+
+    # Total Generation
+    line_idx += 1
+    col_idx = 1
+    sheet.cell(row=line_idx, column=col_idx).value = operator_type
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = tn_node_id
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = 'Generation, [MWh]'
+    col_idx += 1
+    for year in results:
+        for day in results[year]:
+            sheet.cell(row=line_idx, column=col_idx).value = results[year][day]['total_gen']
+            sheet.cell(row=line_idx, column=col_idx).number_format = decimal_style
+            col_idx += 1
+
+    # Total Conventional Generation
+    line_idx += 1
+    col_idx = 1
+    sheet.cell(row=line_idx, column=col_idx).value = operator_type
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = tn_node_id
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = 'Conventional Generation, [MWh]'
+    col_idx += 1
+    for year in results:
+        for day in results[year]:
+            sheet.cell(row=line_idx, column=col_idx).value = results[year][day]['total_conventional_gen']
+            sheet.cell(row=line_idx, column=col_idx).number_format = decimal_style
+            col_idx += 1
+
+    # Total Renewable Generation
+    line_idx += 1
+    col_idx = 1
+    sheet.cell(row=line_idx, column=col_idx).value = operator_type
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = tn_node_id
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = 'Renewable generation, [MWh]'
+    col_idx += 1
+    for year in results:
+        for day in results[year]:
+            sheet.cell(row=line_idx, column=col_idx).value = results[year][day]['total_renewable_gen']
+            sheet.cell(row=line_idx, column=col_idx).number_format = decimal_style
+            col_idx += 1
+
+    # Renewable Generation Curtailed
+    if network.params.rg_curt:
+        line_idx += 1
+        col_idx = 1
+        sheet.cell(row=line_idx, column=col_idx).value = operator_type
+        col_idx += 1
+        sheet.cell(row=line_idx, column=col_idx).value = tn_node_id
+        col_idx += 1
+        sheet.cell(row=line_idx, column=col_idx).value = 'Renewable generation curtailed, [MWh]'
+        col_idx += 1
+        for year in results:
+            for day in results[year]:
+                sheet.cell(row=line_idx, column=col_idx).value = results[year][day]['gen_curt']
+                sheet.cell(row=line_idx, column=col_idx).number_format = decimal_style
+                col_idx += 1
+
+    # Losses
+    line_idx += 1
+    col_idx = 1
+    sheet.cell(row=line_idx, column=col_idx).value = operator_type
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = tn_node_id
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = 'Losses, [MWh]'
+    col_idx += 1
+    for year in results:
+        for day in results[year]:
+            sheet.cell(row=line_idx, column=col_idx).value = results[year][day]['losses']
+            sheet.cell(row=line_idx, column=col_idx).number_format = decimal_style
+            col_idx += 1
+
+    # Number of price (market) scenarios
+    line_idx += 1
+    col_idx = 1
+    sheet.cell(row=line_idx, column=col_idx).value = operator_type
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = tn_node_id
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = 'Number of market scenarios'
+    col_idx += 1
+    for year in results:
+        for day in results[year]:
+            sheet.cell(row=line_idx, column=col_idx).value = len(network.network[year][day].prob_market_scenarios)
+            col_idx += 1
+
+    # Number of operation (generation and consumption) scenarios
+    line_idx += 1
+    col_idx = 1
+    sheet.cell(row=line_idx, column=col_idx).value = operator_type
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = tn_node_id
+    col_idx += 1
+    sheet.cell(row=line_idx, column=col_idx).value = 'Number of operation scenarios'
+    col_idx += 1
+    for year in results:
+        for day in results[year]:
+            sheet.cell(row=line_idx, column=col_idx).value = len(network.network[year][day].prob_operation_scenarios)
+            col_idx += 1
+
+    return line_idx
+
+
+def _write_shared_ess_specifications(workbook, shared_ess_info):
+
+    sheet = workbook.create_sheet('Shared ESS Specifications')
+
+    decimal_style = '0.000'
+
+    # Write Header
+    row_idx = 1
+    sheet.cell(row=row_idx, column=1).value = 'Year'
+    sheet.cell(row=row_idx, column=2).value = 'Node ID'
+    sheet.cell(row=row_idx, column=3).value = 'Sinst, [MVA]'
+    sheet.cell(row=row_idx, column=4).value = 'Einst, [MVAh]'
+
+    # Write Shared ESS specifications
+    for year in shared_ess_info.years:
+        for shared_ess in shared_ess_info.shared_energy_storages[year]:
+            row_idx = row_idx + 1
+            sheet.cell(row=row_idx, column=1).value = year
+            sheet.cell(row=row_idx, column=2).value = shared_ess.bus
+            sheet.cell(row=row_idx, column=3).value = shared_ess.s
+            sheet.cell(row=row_idx, column=3).number_format = decimal_style
+            sheet.cell(row=row_idx, column=4).value = shared_ess.e
+            sheet.cell(row=row_idx, column=4).number_format = decimal_style
+
+
+def _write_objective_function_evolution_to_excel(workbook, primal_evolution):
+
+    sheet = workbook.create_sheet('Primal Evolution')
+
+    decimal_style = '0.000000'
+    row_idx = 1
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Iteration'
+    sheet.cell(row=row_idx, column=2).value = 'OF value'
+    row_idx = row_idx + 1
+    for i in range(len(primal_evolution)):
+        sheet.cell(row=row_idx, column=1).value = i
+        sheet.cell(row=row_idx, column=2).value = primal_evolution[i]
+        sheet.cell(row=row_idx, column=2).number_format = decimal_style
+        sheet.cell(row=row_idx, column=2).value = primal_evolution[i]
+        sheet.cell(row=row_idx, column=2).number_format = decimal_style
+        row_idx = row_idx + 1
+
+
+def _write_interface_power_flow_results_to_excel(planning_problem, workbook, results):
+
+    sheet = workbook.create_sheet('Interface PF')
+
+    row_idx = 1
+    decimal_style = '0.00'
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Node ID'
+    sheet.cell(row=row_idx, column=2).value = 'Operator'
+    sheet.cell(row=row_idx, column=3).value = 'Year'
+    sheet.cell(row=row_idx, column=4).value = 'Day'
+    sheet.cell(row=row_idx, column=5).value = 'Quantity'
+    sheet.cell(row=row_idx, column=6).value = 'Market Scenario'
+    sheet.cell(row=row_idx, column=7).value = 'Operation Scenario'
+    for p in range(planning_problem.num_instants):
+        sheet.cell(row=row_idx, column=p + 8).value = p
+    row_idx = row_idx + 1
+
+    # TSO's results
+    for year in results['tso']:
+        for day in results['tso'][year]:
+            for node_id in results['tso'][year][day]:
+                expected_p = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_q = [0.0 for _ in range(planning_problem.num_instants)]
+                for s_m in results['tso'][year][day][node_id]:
+                    omega_m = planning_problem.transmission_network.network[year][day].prob_market_scenarios[s_m]
+                    for s_o in results['tso'][year][day][node_id][s_m]:
+                        omega_s = planning_problem.transmission_network.network[year][day].prob_operation_scenarios[s_o]
+
+                        # Active Power
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'TSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'P, [MW]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            interface_p = results['tso'][year][day][node_id][s_m][s_o]['p'][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = interface_p
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            expected_p[p] += interface_p * omega_m * omega_s
+                        row_idx += 1
+
+                        # Reactive Power
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'TSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            interface_q = results['tso'][year][day][node_id][s_m][s_o]['q'][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = interface_q
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            expected_q[p] += interface_q * omega_m * omega_s
+                        row_idx += 1
+
+                # Expected Active Power
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'TSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'P, [MW]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_p[p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                row_idx += 1
+
+                # Expected Reactive Power
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'TSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_q[p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                row_idx += 1
+
+    # DSOs' results
+    for node_id in results['dso']:
+        for year in results['dso'][node_id]:
+            for day in results['dso'][node_id][year]:
+                expected_p = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_q = [0.0 for _ in range(planning_problem.num_instants)]
+                for s_m in results['dso'][node_id][year][day]:
+                    omega_m = planning_problem.distribution_networks[node_id].network[year][day].prob_market_scenarios[s_m]
+                    for s_o in results['dso'][node_id][year][day][s_m]:
+                        omega_s = planning_problem.distribution_networks[node_id].network[year][day].prob_operation_scenarios[s_o]
+
+                        # Active Power
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'DSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'P, [MW]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            interface_p = results['dso'][node_id][year][day][s_m][s_o]['p'][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = interface_p
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            expected_p[p] += interface_p * omega_m * omega_s
+                        row_idx += 1
+
+                        # Reactive Power
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'DSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(len(results['dso'][node_id][year][day][s_m][s_o]['q'])):
+                            interface_q = results['dso'][node_id][year][day][s_m][s_o]['q'][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = interface_q
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            expected_q[p] += interface_q * omega_m * omega_s
+                        row_idx += 1
+
+                # Expected Active Power
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'DSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'P, [MW]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_p[p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                row_idx += 1
+
+                # Expected Reactive Power
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'DSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(len(results['dso'][node_id][year][day][s_m][s_o]['q'])):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_q[p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                row_idx += 1
+
+
+def _write_shared_energy_storages_results_to_excel(planning_problem, workbook, results):
+
+    sheet = workbook.create_sheet('Shared ESS')
+
+    row_idx = 1
+    decimal_style = '0.00'
+    percent_style = '0.00%'
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Node ID'
+    sheet.cell(row=row_idx, column=2).value = 'Operator'
+    sheet.cell(row=row_idx, column=3).value = 'Year'
+    sheet.cell(row=row_idx, column=4).value = 'Day'
+    sheet.cell(row=row_idx, column=5).value = 'Quantity'
+    sheet.cell(row=row_idx, column=6).value = 'Market Scenario'
+    sheet.cell(row=row_idx, column=7).value = 'Operation Scenario'
+    for p in range(planning_problem.num_instants):
+        sheet.cell(row=row_idx, column=p + 8).value = p
+
+    # TSO's results
+    for year in results['tso']['results']:
+        for day in results['tso']['results'][year]:
+
+            expected_p = dict()
+            expected_q = dict()
+            expected_s = dict()
+            expected_soc = dict()
+            expected_soc_percent = dict()
+            for node_id in planning_problem.active_distribution_network_nodes:
+                expected_p[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_q[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_s[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_soc[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_soc_percent[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+
+            for s_m in results['tso']['results'][year][day]['scenarios']:
+
+                omega_m = planning_problem.transmission_network.network[year][day].prob_market_scenarios[s_m]
+
+                for s_o in results['tso']['results'][year][day]['scenarios'][s_m]:
+
+                    omega_s = planning_problem.transmission_network.network[year][day].prob_operation_scenarios[s_o]
+
+                    for node_id in planning_problem.active_distribution_network_nodes:
+
+                        # Active power
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'TSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'P, [MW]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_p = results['tso']['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['p'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_p
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_p != 'N/A':
+                                expected_p[node_id][p] += ess_p * omega_m * omega_s
+                            else:
+                                expected_p[node_id][p] = ess_p
+
+                        # Reactive power
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'TSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_q = results['tso']['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['q'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_q
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_q != 'N/A':
+                                expected_q[node_id][p] += ess_q * omega_m * omega_s
+                            else:
+                                expected_q[node_id][p] = ess_q
+
+                        # Apparent power
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'TSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_s = results['tso']['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['s'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_s
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_s != 'N/A':
+                                expected_s[node_id][p] += ess_s * omega_m * omega_s
+                            else:
+                                expected_s[node_id][p] = ess_s
+
+                        # State-of-Charge, [MVAh]
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'TSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'SoC, [MVAh]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_soc = results['tso']['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['soc'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_soc
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_soc != 'N/A':
+                                expected_soc[node_id][p] += ess_soc * omega_m * omega_s
+                            else:
+                                expected_soc[node_id][p] = ess_soc
+
+                        # State-of-Charge, [%]
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'TSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'SoC, [%]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_soc_percent = results['tso']['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['soc_percent'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_soc_percent
+                            sheet.cell(row=row_idx, column=p + 8).number_format = percent_style
+                            if ess_soc_percent != 'N/A':
+                                expected_soc_percent[node_id][p] += ess_soc_percent * omega_m * omega_s
+                            else:
+                                expected_soc_percent[node_id][p] = ess_soc_percent
+
+            for node_id in planning_problem.active_distribution_network_nodes:
+
+                # Active Power, [MW]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'TSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'P, [MW]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_p[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # Reactive Power, [MVAr]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'TSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_q[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # Apparent Power, [MVA]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'TSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_s[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # State-of-Charge, [MVAh]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'TSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'SoC, [MVAh]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_soc[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # State-of-Charge, [%]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'TSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'SoC, [%]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_soc_percent[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = percent_style
+
+    # DSO's results
+    for node_id in results['dso']:
+        for year in results['dso'][node_id]['results']:
+            for day in results['dso'][node_id]['results'][year]:
+
+                distribution_network = planning_problem.distribution_networks[node_id].network[year][day]
+                ref_node_id = distribution_network.get_reference_node_id()
+
+                expected_p = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_q = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_s = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_soc = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_soc_percent = [0.0 for _ in range(planning_problem.num_instants)]
+
+                for s_m in results['dso'][node_id]['results'][year][day]['scenarios']:
+
+                    omega_m = distribution_network.prob_market_scenarios[s_m]
+
+                    for s_o in results['dso'][node_id]['results'][year][day]['scenarios'][s_m]:
+
+                        omega_s = distribution_network.prob_operation_scenarios[s_o]
+
+                        # Active power
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'DSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'P, [MW]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_p = results['dso'][node_id]['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['p'][ref_node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_p
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_p != 'N/A':
+                                expected_p[p] += ess_p * omega_m * omega_s
+                            else:
+                                expected_p[p] = ess_p
+
+                        # Reactive power
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'DSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_q = results['dso'][node_id]['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['q'][ref_node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_q
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_q != 'N/A':
+                                expected_q[p] += ess_q * omega_m * omega_s
+                            else:
+                                expected_q[p] = ess_q
+
+                        # Apparent power
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'DSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_s = results['dso'][node_id]['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['s'][ref_node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_s
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_s != 'N/A':
+                                expected_s[p] += ess_s * omega_m * omega_s
+                            else:
+                                expected_s[p] = ess_s
+
+                        # State-of-Charge, [MVAh]
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'DSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'SoC, [MVAh]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_soc = results['dso'][node_id]['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['soc'][ref_node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_soc
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_soc != 'N/A':
+                                expected_soc[p] += ess_soc * omega_m * omega_s
+                            else:
+                                expected_soc[p] = ess_soc
+
+                        # State-of-Charge, [%]
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'DSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'SoC, [%]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_soc_percent = results['dso'][node_id]['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['soc_percent'][ref_node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_soc_percent
+                            sheet.cell(row=row_idx, column=p + 8).number_format = percent_style
+                            if ess_soc_percent != 'N/A':
+                                expected_soc_percent[p] += ess_soc_percent * omega_m * omega_s
+                            else:
+                                expected_soc_percent[p] = ess_soc_percent
+
+                # Expected values
+
+                # Active Power, [MW]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'DSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'P, [MW]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_p[p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # Reactive Power, [MVAr]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'DSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_q[p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # Apparent Power, [MVA]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'DSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_s[p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # State-of-Charge, [MVAh]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'DSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'SoC, [MVAh]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_soc[p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # State-of-Charge, [%]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'DSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'SoC, [%]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_soc_percent[p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = percent_style
+
+    # ESSO's results
+    for year in results['esso']['results']:
+        for day in results['esso']['results'][year]:
+
+            expected_p = dict()
+            expected_q = dict()
+            expected_s = dict()
+            expected_pup = dict()
+            expected_pdown = dict()
+            expected_soc = dict()
+            expected_soc_percent = dict()
+            for node_id in planning_problem.active_distribution_network_nodes:
+                expected_p[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_q[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_s[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_pup[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_pdown[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_soc[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+                expected_soc_percent[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
+
+            for s_m in results['esso']['results'][year][day]['scenarios']:
+
+                omega_m = planning_problem.shared_ess_data.prob_market_scenarios[s_m]
+
+                for s_o in results['esso']['results'][year][day]['scenarios'][s_m]:
+
+                    omega_s = planning_problem.shared_ess_data.prob_operation_scenarios[s_o]
+
+                    for node_id in planning_problem.active_distribution_network_nodes:
+
+                        # Active power
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'P, [MW]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_p = results['esso']['results'][year][day]['scenarios'][s_m][s_o]['p'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_p
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_p != 'N/A':
+                                expected_p[node_id][p] += ess_p * omega_m * omega_s
+                            else:
+                                expected_p[node_id][p] = ess_p
+
+                        # Reactive power
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_q = results['esso']['results'][year][day]['scenarios'][s_m][s_o]['q'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_q
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_q != 'N/A':
+                                expected_q[node_id][p] += ess_q * omega_m * omega_s
+                            else:
+                                expected_q[node_id][p] = ess_q
+
+                        # Apparent power
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_s = results['esso']['results'][year][day]['scenarios'][s_m][s_o]['s'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_s
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_s != 'N/A':
+                                expected_s[node_id][p] += ess_s * omega_m * omega_s
+                            else:
+                                expected_s[node_id][p] = ess_s
+
+                        # Upward reserve
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'Upward reserve, [MW]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_pup = results['esso']['results'][year][day]['scenarios'][s_m][s_o]['p_up'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_pup
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_pup != 'N/A':
+                                expected_pup[node_id][p] += ess_pup * omega_m * omega_s
+                            else:
+                                expected_pup[node_id][p] = ess_pup
+
+                        # Downward reserve
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'Downward reserve, [MW]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_pdown = results['esso']['results'][year][day]['scenarios'][s_m][s_o]['p_down'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_pdown
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_pdown != 'N/A':
+                                expected_pup[node_id][p] += ess_pdown * omega_m * omega_s
+                            else:
+                                expected_pup[node_id][p] = ess_pdown
+
+                        # State-of-Charge, [MVAh]
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'SoC, [MVAh]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_soc = results['esso']['results'][year][day]['scenarios'][s_m][s_o]['soc'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_soc
+                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+                            if ess_soc != 'N/A':
+                                expected_soc[node_id][p] += ess_soc * omega_m * omega_s
+                            else:
+                                expected_soc[node_id][p] = ess_soc
+
+                        # State-of-Charge, [%]
+                        row_idx = row_idx + 1
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                        sheet.cell(row=row_idx, column=3).value = int(year)
+                        sheet.cell(row=row_idx, column=4).value = day
+                        sheet.cell(row=row_idx, column=5).value = 'SoC, [%]'
+                        sheet.cell(row=row_idx, column=6).value = s_m
+                        sheet.cell(row=row_idx, column=7).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            ess_soc_percent = results['esso']['results'][year][day]['scenarios'][s_m][s_o]['soc_percent'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 8).value = ess_soc_percent
+                            sheet.cell(row=row_idx, column=p + 8).number_format = percent_style
+                            if ess_soc_percent != 'N/A':
+                                expected_soc_percent[node_id][p] += ess_soc_percent * omega_m * omega_s
+                            else:
+                                expected_soc_percent[node_id][p] = ess_soc_percent
+
+            for node_id in planning_problem.active_distribution_network_nodes:
+
+                # Active Power, [MW]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'P, [MW]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_p[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # Reactive Power, [MVAr]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_q[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # Apparent Power, [MVA]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_s[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # State-of-Charge, [MVAh]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'SoC, [MVAh]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_soc[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
+
+                # State-of-Charge, [%]
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = 'ESSO'
+                sheet.cell(row=row_idx, column=3).value = int(year)
+                sheet.cell(row=row_idx, column=4).value = day
+                sheet.cell(row=row_idx, column=5).value = 'SoC, [%]'
+                sheet.cell(row=row_idx, column=6).value = 'Expected'
+                sheet.cell(row=row_idx, column=7).value = '-'
+                for p in range(planning_problem.num_instants):
+                    sheet.cell(row=row_idx, column=p + 8).value = expected_soc_percent[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 8).number_format = percent_style
+
+
+def _write_network_voltage_results_to_excel(planning_problem, workbook, results):
+
+    sheet = workbook.create_sheet('Voltage')
+
+    row_idx = 1
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Operator'
+    sheet.cell(row=row_idx, column=2).value = 'Connection Node ID'
+    sheet.cell(row=row_idx, column=3).value = 'Network Node ID'
+    sheet.cell(row=row_idx, column=4).value = 'Year'
+    sheet.cell(row=row_idx, column=5).value = 'Day'
+    sheet.cell(row=row_idx, column=6).value = 'Quantity'
+    sheet.cell(row=row_idx, column=7).value = 'Market Scenario'
+    sheet.cell(row=row_idx, column=8).value = 'Operation Scenario'
+    for p in range(planning_problem.num_instants):
+        sheet.cell(row=row_idx, column=p + 9).value = p
+    row_idx = row_idx + 1
+
+    # Write results -- TSO
+    transmission_network = planning_problem.transmission_network.network
+    row_idx = _write_network_voltage_results_per_operator(transmission_network, sheet, 'TSO', row_idx, results['tso']['results'])
+
+    # Write results -- DSOs
+    for tn_node_id in results['dso']:
+        dso_results = results['dso'][tn_node_id]['results']
+        distribution_network = planning_problem.distribution_networks[tn_node_id].network
+        row_idx = _write_network_voltage_results_per_operator(distribution_network, sheet, 'DSO', row_idx, dso_results, tn_node_id=tn_node_id)
+
+
+def _write_network_voltage_results_per_operator(network, sheet, operator_type, row_idx, results, tn_node_id='-'):
+
+    decimal_style = '0.00'
+
+    violation_fill = PatternFill(start_color='FFFF0000', end_color='FFFF0000', fill_type='solid')
+
+    for year in results:
+        for day in results[year]:
+
+            ref_node_id = network[year][day].get_reference_node_id()
+            expected_vmag = dict()
+            expected_vang = dict()
+            for node in network[year][day].nodes:
+                expected_vmag[node.bus_i] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_vang[node.bus_i] = [0.0 for _ in range(network[year][day].num_instants)]
+
+            for s_m in results[year][day]['scenarios']:
+                omega_m = network[year][day].prob_market_scenarios[s_m]
+                for s_o in results[year][day]['scenarios'][s_m]:
+                    omega_s = network[year][day].prob_operation_scenarios[s_o]
+                    for node_id in results[year][day]['scenarios'][s_m][s_o]['voltage']['vmag']:
+
+                        v_min, v_max = network[year][day].get_node_voltage_limits(node_id)
+
+                        # Voltage magnitude
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = node_id
+                        sheet.cell(row=row_idx, column=4).value = int(year)
+                        sheet.cell(row=row_idx, column=5).value = day
+                        sheet.cell(row=row_idx, column=6).value = 'Vmag, [p.u.]'
+                        sheet.cell(row=row_idx, column=7).value = s_m
+                        sheet.cell(row=row_idx, column=8).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            v_mag = results[year][day]['scenarios'][s_m][s_o]['voltage']['vmag'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 9).value = v_mag
+                            sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            if node_id != ref_node_id and (v_mag > v_max + SMALL_TOLERANCE or v_mag < v_min - SMALL_TOLERANCE):
+                                sheet.cell(row=row_idx, column=p + 9).fill = violation_fill
+                            expected_vmag[node_id][p] += v_mag * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        # Voltage angle
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = node_id
+                        sheet.cell(row=row_idx, column=4).value = int(year)
+                        sheet.cell(row=row_idx, column=5).value = day
+                        sheet.cell(row=row_idx, column=6).value = 'Vang, [º]'
+                        sheet.cell(row=row_idx, column=7).value = s_m
+                        sheet.cell(row=row_idx, column=8).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            v_ang = results[year][day]['scenarios'][s_m][s_o]['voltage']['vang'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 9).value = v_ang
+                            sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            expected_vang[node_id][p] += v_ang * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+            for node in network[year][day].nodes:
+
+                node_id = node.bus_i
+                v_min, v_max = network[year][day].get_node_voltage_limits(node_id)
+
+                # Expected voltage magnitude
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = node_id
+                sheet.cell(row=row_idx, column=4).value = int(year)
+                sheet.cell(row=row_idx, column=5).value = day
+                sheet.cell(row=row_idx, column=6).value = 'Vmag, [p.u.]'
+                sheet.cell(row=row_idx, column=7).value = 'Expected'
+                sheet.cell(row=row_idx, column=8).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 9).value = expected_vmag[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                    if node_id != ref_node_id and (expected_vmag[node_id][p] > v_max + SMALL_TOLERANCE or expected_vmag[node_id][p] < v_min - SMALL_TOLERANCE):
+                        sheet.cell(row=row_idx, column=p + 9).fill = violation_fill
+                row_idx = row_idx + 1
+
+                # Expected voltage angle
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = node_id
+                sheet.cell(row=row_idx, column=4).value = int(year)
+                sheet.cell(row=row_idx, column=5).value = day
+                sheet.cell(row=row_idx, column=6).value = 'Vang, [º]'
+                sheet.cell(row=row_idx, column=7).value = 'Expected'
+                sheet.cell(row=row_idx, column=8).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 9).value = expected_vang[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                row_idx = row_idx + 1
+
+    return row_idx
+
+
+def _write_network_consumption_results_to_excel(planning_problem, workbook, results):
+
+    sheet = workbook.create_sheet('Consumption')
+
+    row_idx = 1
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Operator'
+    sheet.cell(row=row_idx, column=2).value = 'Connection Node ID'
+    sheet.cell(row=row_idx, column=3).value = 'Network Node ID'
+    sheet.cell(row=row_idx, column=4).value = 'Year'
+    sheet.cell(row=row_idx, column=5).value = 'Day'
+    sheet.cell(row=row_idx, column=6).value = 'Quantity'
+    sheet.cell(row=row_idx, column=7).value = 'Market Scenario'
+    sheet.cell(row=row_idx, column=8).value = 'Operation Scenario'
+    for p in range(planning_problem.num_instants):
+        sheet.cell(row=row_idx, column=p + 9).value = p
+    row_idx = row_idx + 1
+
+    # Write results -- TSO
+    tso_results = results['tso']['results']
+    transmission_network = planning_problem.transmission_network.network
+    tn_params = planning_problem.transmission_network.params
+    row_idx = _write_network_consumption_results_per_operator(transmission_network, tn_params, sheet, 'TSO', row_idx, tso_results)
+
+    # Write results -- DSOs
+    for tn_node_id in results['dso']:
+        dso_results = results['dso'][tn_node_id]['results']
+        distribution_network = planning_problem.distribution_networks[tn_node_id].network
+        dn_params = planning_problem.distribution_networks[tn_node_id].params
+        row_idx = _write_network_consumption_results_per_operator(distribution_network, dn_params, sheet, 'DSO', row_idx, dso_results, tn_node_id=tn_node_id)
+
+
+def _write_network_consumption_results_per_operator(network, params, sheet, operator_type, row_idx, results, tn_node_id='-'):
+
+    decimal_style = '0.00'
+    violation_fill = PatternFill(start_color='FFFF0000', end_color='FFFF0000', fill_type='solid')
+
+    for year in results:
+        for day in results[year]:
+
+            expected_pc = dict()
+            expected_flex_up = dict()
+            expected_flex_down = dict()
+            expected_pc_curt = dict()
+            expected_pnet = dict()
+            expected_qc = dict()
+            for node in network[year][day].nodes:
+                expected_pc[node.bus_i] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_flex_up[node.bus_i] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_flex_down[node.bus_i] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_pc_curt[node.bus_i] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_pnet[node.bus_i] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_qc[node.bus_i] = [0.0 for _ in range(network[year][day].num_instants)]
+
+            for s_m in results[year][day]['scenarios']:
+                omega_m = network[year][day].prob_market_scenarios[s_m]
+                for s_o in results[year][day]['scenarios'][s_m]:
+                    omega_s = network[year][day].prob_operation_scenarios[s_o]
+                    for node_id in results[year][day]['scenarios'][s_m][s_o]['consumption']['pc']:
+
+                        # - Active Power
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = node_id
+                        sheet.cell(row=row_idx, column=4).value = int(year)
+                        sheet.cell(row=row_idx, column=5).value = day
+                        sheet.cell(row=row_idx, column=6).value = 'Pc, [MW]'
+                        sheet.cell(row=row_idx, column=7).value = s_m
+                        sheet.cell(row=row_idx, column=8).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            pc = results[year][day]['scenarios'][s_m][s_o]['consumption']['pc'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 9).value = pc
+                            sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            expected_pc[node_id][p] += pc * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        if params.fl_reg:
+
+                            # - Flexibility, up
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Flex Up, [MW]'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                flex = results[year][day]['scenarios'][s_m][s_o]['consumption']['p_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = flex
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                expected_flex_up[node_id][p] += flex * omega_m * omega_s
+                            row_idx = row_idx + 1
+
+                            # - Flexibility, down
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Flex Down, [MW]'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                flex = results[year][day]['scenarios'][s_m][s_o]['consumption']['p_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = flex
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                expected_flex_down[node_id][p] += flex * omega_m * omega_s
+                            row_idx = row_idx + 1
+
+                        if params.l_curt:
+
+                            # - Active power curtailment
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Pc_curt, [MW]'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                pc_curt = results[year][day]['scenarios'][s_m][s_o]['consumption']['pc_curt'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = pc_curt
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                if pc_curt >= SMALL_TOLERANCE:
+                                    sheet.cell(row=row_idx, column=p + 9).fill = violation_fill
+                                expected_pc_curt[node_id][p] += pc_curt * omega_m * omega_s
+                            row_idx = row_idx + 1
+
+                        if params.fl_reg or params.l_curt:
+
+                            # - Active power net consumption
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Pc_net, [MW]'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                p_net = results[year][day]['scenarios'][s_m][s_o]['consumption']['pc_net'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = p_net
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                expected_pnet[node_id][p] += p_net * omega_m * omega_s
+                            row_idx = row_idx + 1
+
+                        # - Reactive power
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = node_id
+                        sheet.cell(row=row_idx, column=4).value = int(year)
+                        sheet.cell(row=row_idx, column=5).value = day
+                        sheet.cell(row=row_idx, column=6).value = 'Qc, [MVAr]'
+                        sheet.cell(row=row_idx, column=7).value = s_m
+                        sheet.cell(row=row_idx, column=8).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            qc = results[year][day]['scenarios'][s_m][s_o]['consumption']['qc'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 9).value = qc
+                            sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            expected_qc[node_id][p] += qc * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+            for node in network[year][day].nodes:
+
+                node_id = node.bus_i
+
+                # - Active Power
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = node_id
+                sheet.cell(row=row_idx, column=4).value = int(year)
+                sheet.cell(row=row_idx, column=5).value = day
+                sheet.cell(row=row_idx, column=6).value = 'Pc, [MW]'
+                sheet.cell(row=row_idx, column=7).value = 'Expected'
+                sheet.cell(row=row_idx, column=8).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 9).value = expected_pc[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                if params.fl_reg:
+
+                    # - Flexibility, up
+                    sheet.cell(row=row_idx, column=1).value = operator_type
+                    sheet.cell(row=row_idx, column=2).value = tn_node_id
+                    sheet.cell(row=row_idx, column=3).value = node_id
+                    sheet.cell(row=row_idx, column=4).value = int(year)
+                    sheet.cell(row=row_idx, column=5).value = day
+                    sheet.cell(row=row_idx, column=6).value = 'Flex Up, [MW]'
+                    sheet.cell(row=row_idx, column=7).value = 'Expected'
+                    sheet.cell(row=row_idx, column=8).value = '-'
+                    for p in range(network[year][day].num_instants):
+                        sheet.cell(row=row_idx, column=p + 9).value = expected_flex_up[node_id][p]
+                        sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+                    # - Flexibility, down
+                    sheet.cell(row=row_idx, column=1).value = operator_type
+                    sheet.cell(row=row_idx, column=2).value = tn_node_id
+                    sheet.cell(row=row_idx, column=3).value = node_id
+                    sheet.cell(row=row_idx, column=4).value = int(year)
+                    sheet.cell(row=row_idx, column=5).value = day
+                    sheet.cell(row=row_idx, column=6).value = 'Flex Down, [MW]'
+                    sheet.cell(row=row_idx, column=7).value = 'Expected'
+                    sheet.cell(row=row_idx, column=8).value = '-'
+                    for p in range(network[year][day].num_instants):
+                        sheet.cell(row=row_idx, column=p + 9).value = expected_flex_down[node_id][p]
+                        sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+                if params.l_curt:
+
+                    # - Load curtailment (active power)
+                    sheet.cell(row=row_idx, column=1).value = operator_type
+                    sheet.cell(row=row_idx, column=2).value = tn_node_id
+                    sheet.cell(row=row_idx, column=3).value = node_id
+                    sheet.cell(row=row_idx, column=4).value = int(year)
+                    sheet.cell(row=row_idx, column=5).value = day
+                    sheet.cell(row=row_idx, column=6).value = 'Pc_curt, [MW]'
+                    sheet.cell(row=row_idx, column=7).value = 'Expected'
+                    sheet.cell(row=row_idx, column=8).value = '-'
+                    for p in range(network[year][day].num_instants):
+                        sheet.cell(row=row_idx, column=p + 9).value = expected_pc_curt[node_id][p]
+                        sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                        if expected_pc_curt[node_id][p] >= SMALL_TOLERANCE:
+                            sheet.cell(row=row_idx, column=p + 9).fill = violation_fill
+                    row_idx = row_idx + 1
+
+                if params.fl_reg or params.l_curt:
+
+                    # - Active power net consumption
+                    sheet.cell(row=row_idx, column=1).value = operator_type
+                    sheet.cell(row=row_idx, column=2).value = tn_node_id
+                    sheet.cell(row=row_idx, column=3).value = node_id
+                    sheet.cell(row=row_idx, column=4).value = int(year)
+                    sheet.cell(row=row_idx, column=5).value = day
+                    sheet.cell(row=row_idx, column=6).value = 'Pc_net, [MW]'
+                    sheet.cell(row=row_idx, column=7).value = 'Expected'
+                    sheet.cell(row=row_idx, column=8).value = '-'
+                    for p in range(network[year][day].num_instants):
+                        sheet.cell(row=row_idx, column=p + 9).value = expected_pnet[node_id][p]
+                        sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+                # - Reactive power
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = node_id
+                sheet.cell(row=row_idx, column=4).value = int(year)
+                sheet.cell(row=row_idx, column=5).value = day
+                sheet.cell(row=row_idx, column=6).value = 'Qc, [MVAr]'
+                sheet.cell(row=row_idx, column=7).value = 'Expected'
+                sheet.cell(row=row_idx, column=8).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 9).value = expected_qc[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                row_idx = row_idx + 1
+
+    return row_idx
+
+
+def _write_network_generation_results_to_excel(planning_problem, workbook, results):
+
+    sheet = workbook.create_sheet('Generation')
+
+    row_idx = 1
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Operator'
+    sheet.cell(row=row_idx, column=2).value = 'Connection Node ID'
+    sheet.cell(row=row_idx, column=3).value = 'Network Node ID'
+    sheet.cell(row=row_idx, column=4).value = 'Generator ID'
+    sheet.cell(row=row_idx, column=5).value = 'Type'
+    sheet.cell(row=row_idx, column=6).value = 'Year'
+    sheet.cell(row=row_idx, column=7).value = 'Day'
+    sheet.cell(row=row_idx, column=8).value = 'Quantity'
+    sheet.cell(row=row_idx, column=9).value = 'Market Scenario'
+    sheet.cell(row=row_idx, column=10).value = 'Operation Scenario'
+    for p in range(planning_problem.num_instants):
+        sheet.cell(row=row_idx, column=p + 11).value = p
+    row_idx = row_idx + 1
+
+    # Write results -- TSO
+    transmission_network = planning_problem.transmission_network.network
+    tn_params = planning_problem.transmission_network.params
+    row_idx = _write_network_generation_results_per_operator(transmission_network, tn_params, sheet, 'TSO', row_idx, results['tso']['results'])
+
+    # Write results -- DSOs
+    for tn_node_id in results['dso']:
+        dso_results = results['dso'][tn_node_id]['results']
+        distribution_network = planning_problem.distribution_networks[tn_node_id].network
+        dn_params = planning_problem.distribution_networks[tn_node_id].params
+        row_idx = _write_network_generation_results_per_operator(distribution_network, dn_params, sheet, 'DSO', row_idx, dso_results, tn_node_id=tn_node_id)
+
+
+def _write_network_generation_results_per_operator(network, params, sheet, operator_type, row_idx, results, tn_node_id='-'):
+
+    decimal_style = '0.00'
+    violation_fill = PatternFill(start_color='FFFF0000', end_color='FFFF0000', fill_type='solid')
+
+    for year in results:
+        for day in results[year]:
+
+            expected_pg = dict()
+            expected_pg_curt = dict()
+            expected_pg_net = dict()
+            expected_qg = dict()
+            for generator in network[year][day].generators:
+                expected_pg[generator.gen_id] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_pg_curt[generator.gen_id] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_pg_net[generator.gen_id] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_qg[generator.gen_id] = [0.0 for _ in range(network[year][day].num_instants)]
+
+            for s_m in results[year][day]['scenarios']:
+                omega_m = network[year][day].prob_market_scenarios[s_m]
+                for s_o in results[year][day]['scenarios'][s_m]:
+                    omega_s = network[year][day].prob_operation_scenarios[s_o]
+                    for g in results[year][day]['scenarios'][s_m][s_o]['generation']['pg']:
+
+                        node_id = network[year][day].generators[g].bus
+                        gen_id = network[year][day].generators[g].gen_id
+                        gen_type = network[year][day].get_gen_type(gen_id)
+
+                        # Active Power
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = node_id
+                        sheet.cell(row=row_idx, column=4).value = gen_id
+                        sheet.cell(row=row_idx, column=5).value = gen_type
+                        sheet.cell(row=row_idx, column=6).value = int(year)
+                        sheet.cell(row=row_idx, column=7).value = day
+                        sheet.cell(row=row_idx, column=8).value = 'Pg, [MW]'
+                        sheet.cell(row=row_idx, column=9).value = s_m
+                        sheet.cell(row=row_idx, column=10).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            pg = results[year][day]['scenarios'][s_m][s_o]['generation']['pg'][g][p]
+                            sheet.cell(row=row_idx, column=p + 11).value = pg
+                            sheet.cell(row=row_idx, column=p + 11).number_format = decimal_style
+                            expected_pg[gen_id][p] += pg * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        if params.rg_curt:
+
+                            # Active Power curtailment
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = gen_id
+                            sheet.cell(row=row_idx, column=5).value = gen_type
+                            sheet.cell(row=row_idx, column=6).value = int(year)
+                            sheet.cell(row=row_idx, column=7).value = day
+                            sheet.cell(row=row_idx, column=8).value = 'Pg_curt, [MW]'
+                            sheet.cell(row=row_idx, column=9).value = s_m
+                            sheet.cell(row=row_idx, column=10).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                pg_curt = results[year][day]['scenarios'][s_m][s_o]['generation']['pg_curt'][g][p]
+                                sheet.cell(row=row_idx, column=p + 11).value = pg_curt
+                                sheet.cell(row=row_idx, column=p + 11).number_format = decimal_style
+                                if pg_curt > SMALL_TOLERANCE:
+                                    sheet.cell(row=row_idx, column=p + 11).fill = violation_fill
+                                expected_pg_curt[gen_id][p] += pg_curt * omega_m * omega_s
+                            row_idx = row_idx + 1
+
+                            # Active Power net
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = gen_id
+                            sheet.cell(row=row_idx, column=5).value = gen_type
+                            sheet.cell(row=row_idx, column=6).value = int(year)
+                            sheet.cell(row=row_idx, column=7).value = day
+                            sheet.cell(row=row_idx, column=8).value = 'Pg_net, [MW]'
+                            sheet.cell(row=row_idx, column=9).value = s_m
+                            sheet.cell(row=row_idx, column=10).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                pg_net = results[year][day]['scenarios'][s_m][s_o]['generation']['pg_net'][g][p]
+                                sheet.cell(row=row_idx, column=p + 11).value = pg_net
+                                sheet.cell(row=row_idx, column=p + 11).number_format = decimal_style
+                                expected_pg_net[gen_id][p] += pg_net * omega_m * omega_s
+                            row_idx = row_idx + 1
+
+                        # Reactive Power
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = node_id
+                        sheet.cell(row=row_idx, column=4).value = gen_id
+                        sheet.cell(row=row_idx, column=5).value = gen_type
+                        sheet.cell(row=row_idx, column=6).value = int(year)
+                        sheet.cell(row=row_idx, column=7).value = day
+                        sheet.cell(row=row_idx, column=8).value = 'Qg, [MVAr]'
+                        sheet.cell(row=row_idx, column=9).value = s_m
+                        sheet.cell(row=row_idx, column=10).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            qg = results[year][day]['scenarios'][s_m][s_o]['generation']['qg'][g][p]
+                            sheet.cell(row=row_idx, column=p + 11).value = qg
+                            sheet.cell(row=row_idx, column=p + 11).number_format = decimal_style
+                            expected_qg[gen_id][p] += qg * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+            for generator in network[year][day].generators:
+
+                node_id = generator.bus
+                gen_id = generator.gen_id
+                gen_type = network[year][day].get_gen_type(gen_id)
+
+                # Active Power
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = node_id
+                sheet.cell(row=row_idx, column=4).value = gen_id
+                sheet.cell(row=row_idx, column=5).value = gen_type
+                sheet.cell(row=row_idx, column=6).value = int(year)
+                sheet.cell(row=row_idx, column=7).value = day
+                sheet.cell(row=row_idx, column=8).value = 'Pg, [MW]'
+                sheet.cell(row=row_idx, column=9).value = 'Expected'
+                sheet.cell(row=row_idx, column=10).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 11).value = expected_pg[gen_id][p]
+                    sheet.cell(row=row_idx, column=p + 11).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                if params.rg_curt:
+
+                    # Active Power curtailment
+                    sheet.cell(row=row_idx, column=1).value = operator_type
+                    sheet.cell(row=row_idx, column=2).value = tn_node_id
+                    sheet.cell(row=row_idx, column=3).value = node_id
+                    sheet.cell(row=row_idx, column=4).value = gen_id
+                    sheet.cell(row=row_idx, column=5).value = gen_type
+                    sheet.cell(row=row_idx, column=6).value = int(year)
+                    sheet.cell(row=row_idx, column=7).value = day
+                    sheet.cell(row=row_idx, column=8).value = 'Pg_curt, [MW]'
+                    sheet.cell(row=row_idx, column=9).value = 'Expected'
+                    sheet.cell(row=row_idx, column=10).value = '-'
+                    for p in range(network[year][day].num_instants):
+                        sheet.cell(row=row_idx, column=p + 11).value = expected_pg_curt[gen_id][p]
+                        sheet.cell(row=row_idx, column=p + 11).number_format = decimal_style
+                        if expected_pg_curt[gen_id][p] > SMALL_TOLERANCE:
+                            sheet.cell(row=row_idx, column=p + 11).fill = violation_fill
+                    row_idx = row_idx + 1
+
+                    # Active Power net
+                    sheet.cell(row=row_idx, column=1).value = operator_type
+                    sheet.cell(row=row_idx, column=2).value = tn_node_id
+                    sheet.cell(row=row_idx, column=3).value = node_id
+                    sheet.cell(row=row_idx, column=4).value = gen_id
+                    sheet.cell(row=row_idx, column=5).value = gen_type
+                    sheet.cell(row=row_idx, column=6).value = int(year)
+                    sheet.cell(row=row_idx, column=7).value = day
+                    sheet.cell(row=row_idx, column=8).value = 'Pg_net, [MW]'
+                    sheet.cell(row=row_idx, column=9).value = 'Expected'
+                    sheet.cell(row=row_idx, column=10).value = '-'
+                    for p in range(network[year][day].num_instants):
+                        sheet.cell(row=row_idx, column=p + 11).value = expected_pg_net[gen_id][p]
+                        sheet.cell(row=row_idx, column=p + 11).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+                # Reactive Power
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = node_id
+                sheet.cell(row=row_idx, column=4).value = gen_id
+                sheet.cell(row=row_idx, column=5).value = gen_type
+                sheet.cell(row=row_idx, column=6).value = int(year)
+                sheet.cell(row=row_idx, column=7).value = day
+                sheet.cell(row=row_idx, column=8).value = 'Qg, [MVAr]'
+                sheet.cell(row=row_idx, column=9).value = 'Expected'
+                sheet.cell(row=row_idx, column=10).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 11).value = expected_qg[gen_id][p]
+                    sheet.cell(row=row_idx, column=p + 11).number_format = decimal_style
+                row_idx = row_idx + 1
+
+    return row_idx
+
+
+def _write_network_branch_results_to_excel(planning_problem, workbook, results, result_type):
+
+    sheet_name = str()
+    if result_type == 'losses':
+        sheet_name = 'Branch Losses'
+    elif result_type == 'ratio':
+        sheet_name = 'Transformer Ratio'
+    elif result_type == 'current_perc':
+        sheet_name = 'Branch Loading'
+    sheet = workbook.create_sheet(sheet_name)
+
+    row_idx = 1
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Operator'
+    sheet.cell(row=row_idx, column=2).value = 'Connection Node ID'
+    sheet.cell(row=row_idx, column=3).value = 'From Node ID'
+    sheet.cell(row=row_idx, column=4).value = 'To Node ID'
+    sheet.cell(row=row_idx, column=5).value = 'Year'
+    sheet.cell(row=row_idx, column=6).value = 'Day'
+    sheet.cell(row=row_idx, column=7).value = 'Quantity'
+    sheet.cell(row=row_idx, column=8).value = 'Market Scenario'
+    sheet.cell(row=row_idx, column=9).value = 'Operation Scenario'
+    for p in range(planning_problem.num_instants):
+        sheet.cell(row=row_idx, column=p + 10).value = p
+    row_idx = row_idx + 1
+
+    # Write results -- TSO
+    transmission_network = planning_problem.transmission_network.network
+    row_idx = _write_network_branch_results_per_operator(transmission_network, sheet, 'TSO', row_idx, results['tso']['results'], result_type)
+
+    # Write results -- DSOs
+    for tn_node_id in results['dso']:
+        dso_results = results['dso'][tn_node_id]['results']
+        distribution_network = planning_problem.distribution_networks[tn_node_id].network
+        row_idx = _write_network_branch_results_per_operator(distribution_network, sheet, 'DSO', row_idx, dso_results, result_type, tn_node_id=tn_node_id)
+
+
+def _write_network_branch_results_per_operator(network, sheet, operator_type, row_idx, results, result_type, tn_node_id='-'):
+
+    decimal_style = '0.00'
+    perc_style = '0.00%'
+    violation_fill = PatternFill(start_color='FFFF0000', end_color='FFFF0000', fill_type='solid')
+
+    aux_string = str()
+    if result_type == 'losses':
+        aux_string = 'P, [MW]'
+    elif result_type == 'ratio':
+        aux_string = 'Ratio'
+    elif result_type == 'current_perc':
+        aux_string = 'I, [%]'
+
+    for year in results:
+        for day in results[year]:
+
+            expected_values = dict()
+            for k in range(len(network[year][day].branches)):
+                expected_values[k] = [0.0 for _ in range(network[year][day].num_instants)]
+
+            for s_m in results[year][day]['scenarios']:
+                omega_m = network[year][day].prob_market_scenarios[s_m]
+                for s_o in results[year][day]['scenarios'][s_m]:
+                    omega_s = network[year][day].prob_operation_scenarios[s_o]
+                    for k in results[year][day]['scenarios'][s_m][s_o]['branches'][result_type]:
+                        branch = network[year][day].branches[k]
+                        if not(result_type == 'ratio' and not branch.is_transformer):
+
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = branch.fbus
+                            sheet.cell(row=row_idx, column=4).value = branch.tbus
+                            sheet.cell(row=row_idx, column=5).value = int(year)
+                            sheet.cell(row=row_idx, column=6).value = day
+                            sheet.cell(row=row_idx, column=7).value = aux_string
+                            sheet.cell(row=row_idx, column=8).value = s_m
+                            sheet.cell(row=row_idx, column=9).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                value = results[year][day]['scenarios'][s_m][s_o]['branches'][result_type][k][p]
+                                if result_type == 'current_perc':
+                                    sheet.cell(row=row_idx, column=p + 10).value = value
+                                    sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                                    if value > 1.0 + SMALL_TOLERANCE:
+                                        sheet.cell(row=row_idx, column=p + 10).fill = violation_fill
+                                else:
+                                    sheet.cell(row=row_idx, column=p + 10).value = value
+                                    sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                                expected_values[k][p] += value * omega_m * omega_s
+                            row_idx = row_idx + 1
+
+            for k in range(len(network[year][day].branches)):
+                branch = network[year][day].branches[k]
+                if not (result_type == 'ratio' and not branch.is_transformer):
+
+                    sheet.cell(row=row_idx, column=1).value = operator_type
+                    sheet.cell(row=row_idx, column=2).value = tn_node_id
+                    sheet.cell(row=row_idx, column=3).value = branch.fbus
+                    sheet.cell(row=row_idx, column=4).value = branch.tbus
+                    sheet.cell(row=row_idx, column=5).value = int(year)
+                    sheet.cell(row=row_idx, column=6).value = day
+                    sheet.cell(row=row_idx, column=7).value = aux_string
+                    sheet.cell(row=row_idx, column=8).value = 'Expected'
+                    sheet.cell(row=row_idx, column=9).value = '-'
+                    for p in range(network[year][day].num_instants):
+                        if result_type == 'current_perc':
+                            sheet.cell(row=row_idx, column=p + 10).value = expected_values[k][p]
+                            sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                            if expected_values[k][p] > 1.0:
+                                sheet.cell(row=row_idx, column=p + 10).fill = violation_fill
+                        else:
+                            sheet.cell(row=row_idx, column=p + 10).value = expected_values[k][p]
+                            sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+    return row_idx
+
+
+def _write_network_branch_power_flow_results_to_excel(planning_problem, workbook, results):
+
+    sheet = workbook.create_sheet('Power Flows')
+
+    row_idx = 1
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Operator'
+    sheet.cell(row=row_idx, column=2).value = 'Connection Node ID'
+    sheet.cell(row=row_idx, column=3).value = 'From Node ID'
+    sheet.cell(row=row_idx, column=4).value = 'To Node ID'
+    sheet.cell(row=row_idx, column=5).value = 'Year'
+    sheet.cell(row=row_idx, column=6).value = 'Day'
+    sheet.cell(row=row_idx, column=7).value = 'Quantity'
+    sheet.cell(row=row_idx, column=8).value = 'Market Scenario'
+    sheet.cell(row=row_idx, column=9).value = 'Operation Scenario'
+    for p in range(planning_problem.num_instants):
+        sheet.cell(row=row_idx, column=p + 10).value = p
+    row_idx = row_idx + 1
+
+    # Write results -- TSO
+    transmission_network = planning_problem.transmission_network.network
+    row_idx = _write_network_power_flow_results_per_operator(transmission_network, sheet, 'TSO', row_idx, results['tso']['results'])
+
+    # Write results -- DSOs
+    for tn_node_id in results['dso']:
+        dso_results = results['dso'][tn_node_id]['results']
+        distribution_network = planning_problem.distribution_networks[tn_node_id].network
+        row_idx = _write_network_power_flow_results_per_operator(distribution_network, sheet, 'DSO', row_idx, dso_results, tn_node_id=tn_node_id)
+
+
+def _write_network_power_flow_results_per_operator(network, sheet, operator_type, row_idx, results, tn_node_id='-'):
+
+    decimal_style = '0.00'
+    perc_style = '0.00%'
+
+    for year in results:
+        for day in results[year]:
+
+            expected_values = {'pij': {}, 'pji': {}, 'qij': {}, 'qji': {}, 'sij': {}, 'sji': {}}
+            for k in range(len(network[year][day].branches)):
+                expected_values['pij'][k] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_values['pji'][k] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_values['qij'][k] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_values['qji'][k] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_values['sij'][k] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_values['sji'][k] = [0.0 for _ in range(network[year][day].num_instants)]
+
+            for s_m in results[year][day]['scenarios']:
+                omega_m = network[year][day].prob_market_scenarios[s_m]
+                for s_o in results[year][day]['scenarios'][s_m]:
+                    omega_s = network[year][day].prob_operation_scenarios[s_o]
+                    for k in range(len(network[year][day].branches)):
+
+                        branch = network[year][day].branches[k]
+                        rating = branch.rate
+                        if rating == 0.0:
+                            rating = BRANCH_UNKNOWN_RATING
+
+                        # Pij, [MW]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.fbus
+                        sheet.cell(row=row_idx, column=4).value = branch.tbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'P, [MW]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['pij'][k][p]
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                            expected_values['pij'][k][p] += value * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        # Pij, [%]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.fbus
+                        sheet.cell(row=row_idx, column=4).value = branch.tbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'P, [%]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = abs(results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['pij'][k][p] / rating)
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                        row_idx = row_idx + 1
+
+                        # Pji, [MW]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.tbus
+                        sheet.cell(row=row_idx, column=4).value = branch.fbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'P, [MW]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['pji'][k][p]
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                            expected_values['pji'][k][p] += value * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        # Pji, [%]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.tbus
+                        sheet.cell(row=row_idx, column=4).value = branch.fbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'P, [%]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = abs(results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['pji'][k][p] / rating)
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                        row_idx = row_idx + 1
+
+                        # Qij, [MVAr]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.fbus
+                        sheet.cell(row=row_idx, column=4).value = branch.tbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'Q, [MVAr]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['qij'][k][p]
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                            expected_values['qij'][k][p] += value * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        # Qij, [%]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.fbus
+                        sheet.cell(row=row_idx, column=4).value = branch.tbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'Q, [%]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = abs(results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['qij'][k][p] / rating)
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                        row_idx = row_idx + 1
+
+                        # Qji, [MW]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.tbus
+                        sheet.cell(row=row_idx, column=4).value = branch.fbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'Q, [MVAr]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['qji'][k][p]
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                            expected_values['qji'][k][p] += value * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        # Qji, [%]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.tbus
+                        sheet.cell(row=row_idx, column=4).value = branch.fbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'Q, [%]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = abs(results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['qji'][k][p] / rating)
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                        row_idx = row_idx + 1
+
+                        # Sij, [MVA]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.fbus
+                        sheet.cell(row=row_idx, column=4).value = branch.tbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'S, [MVA]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['sij'][k][p]
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                            expected_values['sij'][k][p] += value * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        # Sij, [%]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.fbus
+                        sheet.cell(row=row_idx, column=4).value = branch.tbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'S, [%]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = abs(results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['sij'][k][p] / rating)
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                        row_idx = row_idx + 1
+
+                        # Sji, [MW]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.tbus
+                        sheet.cell(row=row_idx, column=4).value = branch.fbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'S, [MVA]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['sji'][k][p]
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                            expected_values['sji'][k][p] += value * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        # Sji, [%]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = branch.tbus
+                        sheet.cell(row=row_idx, column=4).value = branch.fbus
+                        sheet.cell(row=row_idx, column=5).value = int(year)
+                        sheet.cell(row=row_idx, column=6).value = day
+                        sheet.cell(row=row_idx, column=7).value = 'S, [%]'
+                        sheet.cell(row=row_idx, column=8).value = s_m
+                        sheet.cell(row=row_idx, column=9).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            value = abs(results[year][day]['scenarios'][s_m][s_o]['branches']['power_flow']['sji'][k][p] / rating)
+                            sheet.cell(row=row_idx, column=p + 10).value = value
+                            sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                        row_idx = row_idx + 1
+
+            for k in range(len(network[year][day].branches)):
+
+                branch = network[year][day].branches[k]
+                rating = branch.rate
+                if rating == 0.0:
+                    rating = BRANCH_UNKNOWN_RATING
+
+                # Pij, [MW]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.fbus
+                sheet.cell(row=row_idx, column=4).value = branch.tbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'P, [MW]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = expected_values['pij'][k][p]
+                    sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # Pij, [%]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.fbus
+                sheet.cell(row=row_idx, column=4).value = branch.tbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'P, [%]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = abs(expected_values['pij'][k][p]) / rating
+                    sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                row_idx = row_idx + 1
+
+                # Pji, [MW]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.tbus
+                sheet.cell(row=row_idx, column=4).value = branch.fbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'P, [MW]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = expected_values['pji'][k][p]
+                    sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # Pji, [%]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.tbus
+                sheet.cell(row=row_idx, column=4).value = branch.fbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'P, [%]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = abs(expected_values['pji'][k][p]) / rating
+                    sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                row_idx = row_idx + 1
+
+                # Qij, [MVAr]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.fbus
+                sheet.cell(row=row_idx, column=4).value = branch.tbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'Q, [MVAr]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = expected_values['qij'][k][p]
+                    sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # Qij, [%]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.fbus
+                sheet.cell(row=row_idx, column=4).value = branch.tbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'Q, [%]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = abs(expected_values['qij'][k][p]) / rating
+                    sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                row_idx = row_idx + 1
+
+                # Qji, [MVAr]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.tbus
+                sheet.cell(row=row_idx, column=4).value = branch.fbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'Q, [MVAr]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = expected_values['qji'][k][p]
+                    sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # Qji, [%]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.tbus
+                sheet.cell(row=row_idx, column=4).value = branch.fbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'Q, [%]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = abs(expected_values['qji'][k][p]) / rating
+                    sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # Sij, [MVA]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.fbus
+                sheet.cell(row=row_idx, column=4).value = branch.tbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'S, [MVA]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = expected_values['sij'][k][p]
+                    sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # Sij, [%]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.fbus
+                sheet.cell(row=row_idx, column=4).value = branch.tbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'S, [%]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = abs(expected_values['sij'][k][p]) / rating
+                    sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                row_idx = row_idx + 1
+
+                # Sji, [MVA]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.tbus
+                sheet.cell(row=row_idx, column=4).value = branch.fbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'S, [MVA]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = expected_values['sji'][k][p]
+                    sheet.cell(row=row_idx, column=p + 10).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # Sji, [%]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = branch.tbus
+                sheet.cell(row=row_idx, column=4).value = branch.fbus
+                sheet.cell(row=row_idx, column=5).value = int(year)
+                sheet.cell(row=row_idx, column=6).value = day
+                sheet.cell(row=row_idx, column=7).value = 'S, [%]'
+                sheet.cell(row=row_idx, column=8).value = 'Expected'
+                sheet.cell(row=row_idx, column=9).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 10).value = abs(expected_values['sji'][k][p]) / rating
+                    sheet.cell(row=row_idx, column=p + 10).number_format = perc_style
+                row_idx = row_idx + 1
+
+    return row_idx
+
+
+def _write_network_energy_storages_results_to_excel(planning_problem, workbook, results):
+
+    sheet = workbook.create_sheet('Energy Storage')
+
+    row_idx = 1
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Operator'
+    sheet.cell(row=row_idx, column=2).value = 'Connection Node ID'
+    sheet.cell(row=row_idx, column=3).value = 'Network Node ID'
+    sheet.cell(row=row_idx, column=4).value = 'Year'
+    sheet.cell(row=row_idx, column=5).value = 'Day'
+    sheet.cell(row=row_idx, column=6).value = 'Quantity'
+    sheet.cell(row=row_idx, column=7).value = 'Market Scenario'
+    sheet.cell(row=row_idx, column=8).value = 'Operation Scenario'
+    for p in range(planning_problem.num_instants):
+        sheet.cell(row=row_idx, column=p + 9).value = p
+    row_idx = row_idx + 1
+
+    # Write results -- TSO
+    tso_results = results['tso']['results']
+    transmission_network = planning_problem.transmission_network.network
+    row_idx = _write_network_energy_storages_results_per_operator(transmission_network, sheet, 'TSO', row_idx, tso_results)
+
+    # Write results -- DSOs
+    for tn_node_id in results['dso']:
+        dso_results = results['dso'][tn_node_id]['results']
+        distribution_network = planning_problem.distribution_networks[tn_node_id].network
+        row_idx = _write_network_energy_storages_results_per_operator(distribution_network, sheet, 'DSO', row_idx, dso_results, tn_node_id=tn_node_id)
+
+
+def _write_network_energy_storages_results_per_operator(network, sheet, operator_type, row_idx, results, tn_node_id='-'):
+
+    decimal_style = '0.00'
+    percent_style = '0.00%'
+
+    for year in results:
+        for day in results[year]:
+
+            expected_p = dict()
+            expected_q = dict()
+            expected_s = dict()
+            expected_soc = dict()
+            expected_soc_percent = dict()
+            for energy_storage in network[year][day].energy_storages:
+                expected_p[energy_storage.bus] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_q[energy_storage.bus] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_s[energy_storage.bus] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_soc[energy_storage.bus] = [0.0 for _ in range(network[year][day].num_instants)]
+                expected_soc_percent[energy_storage.bus] = [0.0 for _ in range(network[year][day].num_instants)]
+
+            for s_m in results[year][day]['scenarios']:
+                omega_m = network[year][day].prob_market_scenarios[s_m]
+                for s_o in results[year][day]['scenarios'][s_m]:
+                    omega_s = network[year][day].prob_operation_scenarios[s_o]
+                    for node_id in results[year][day]['scenarios'][s_m][s_o]['energy_storages']['p']:
+
+                        # - Active Power
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = node_id
+                        sheet.cell(row=row_idx, column=4).value = int(year)
+                        sheet.cell(row=row_idx, column=5).value = day
+                        sheet.cell(row=row_idx, column=6).value = 'P, [MW]'
+                        sheet.cell(row=row_idx, column=7).value = s_m
+                        sheet.cell(row=row_idx, column=8).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            ess_p = results[year][day]['scenarios'][s_m][s_o]['energy_storages']['p'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 9).value = ess_p
+                            sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            expected_p[node_id][p] += ess_p * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        # - Reactive Power
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = node_id
+                        sheet.cell(row=row_idx, column=4).value = int(year)
+                        sheet.cell(row=row_idx, column=5).value = day
+                        sheet.cell(row=row_idx, column=6).value = 'Q, [MVAr]'
+                        sheet.cell(row=row_idx, column=7).value = s_m
+                        sheet.cell(row=row_idx, column=8).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            ess_q = results[year][day]['scenarios'][s_m][s_o]['energy_storages']['q'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 9).value = ess_q
+                            sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            expected_q[node_id][p] += ess_q * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        # - Apparent Power
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = node_id
+                        sheet.cell(row=row_idx, column=4).value = int(year)
+                        sheet.cell(row=row_idx, column=5).value = day
+                        sheet.cell(row=row_idx, column=6).value = 'S, [MVA]'
+                        sheet.cell(row=row_idx, column=7).value = s_m
+                        sheet.cell(row=row_idx, column=8).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            ess_s = results[year][day]['scenarios'][s_m][s_o]['energy_storages']['s'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 9).value = ess_s
+                            sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            expected_s[node_id][p] += ess_s * omega_m * omega_s
+                        row_idx = row_idx + 1
+
+                        # State-of-Charge, [MWh]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = node_id
+                        sheet.cell(row=row_idx, column=4).value = int(year)
+                        sheet.cell(row=row_idx, column=5).value = day
+                        sheet.cell(row=row_idx, column=6).value = 'SoC, [MWh]'
+                        sheet.cell(row=row_idx, column=7).value = s_m
+                        sheet.cell(row=row_idx, column=8).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            ess_soc = results[year][day]['scenarios'][s_m][s_o]['energy_storages']['soc'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 9).value = ess_soc
+                            sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            if ess_soc != 'N/A':
+                                expected_soc[node_id][p] += ess_soc * omega_m * omega_s
+                            else:
+                                expected_soc[node_id][p] = ess_soc
+                        row_idx = row_idx + 1
+
+                        # State-of-Charge, [%]
+                        sheet.cell(row=row_idx, column=1).value = operator_type
+                        sheet.cell(row=row_idx, column=2).value = tn_node_id
+                        sheet.cell(row=row_idx, column=3).value = node_id
+                        sheet.cell(row=row_idx, column=4).value = int(year)
+                        sheet.cell(row=row_idx, column=5).value = day
+                        sheet.cell(row=row_idx, column=6).value = 'SoC, [%]'
+                        sheet.cell(row=row_idx, column=7).value = s_m
+                        sheet.cell(row=row_idx, column=8).value = s_o
+                        for p in range(network[year][day].num_instants):
+                            ess_soc_percent = results[year][day]['scenarios'][s_m][s_o]['energy_storages']['soc_percent'][node_id][p]
+                            sheet.cell(row=row_idx, column=p + 9).value = ess_soc_percent
+                            sheet.cell(row=row_idx, column=p + 9).number_format = percent_style
+                            if ess_soc_percent != 'N/A':
+                                expected_soc_percent[node_id][p] += ess_soc_percent * omega_m * omega_s
+                            else:
+                                expected_soc_percent[node_id][p] = ess_soc_percent
+                        row_idx = row_idx + 1
+
+            for energy_storage in network[year][day].energy_storages:
+
+                node_id = energy_storage.bus
+
+                # - Active Power
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = node_id
+                sheet.cell(row=row_idx, column=4).value = int(year)
+                sheet.cell(row=row_idx, column=5).value = day
+                sheet.cell(row=row_idx, column=6).value = 'P, [MW]'
+                sheet.cell(row=row_idx, column=7).value = 'Expected'
+                sheet.cell(row=row_idx, column=8).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 9).value = expected_p[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # - Reactive Power
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = node_id
+                sheet.cell(row=row_idx, column=4).value = int(year)
+                sheet.cell(row=row_idx, column=5).value = day
+                sheet.cell(row=row_idx, column=6).value = 'Q, [MVAr]'
+                sheet.cell(row=row_idx, column=7).value = 'Expected'
+                sheet.cell(row=row_idx, column=8).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 9).value = expected_q[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # - Apparent Power
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = node_id
+                sheet.cell(row=row_idx, column=4).value = int(year)
+                sheet.cell(row=row_idx, column=5).value = day
+                sheet.cell(row=row_idx, column=6).value = 'S, [MVA]'
+                sheet.cell(row=row_idx, column=7).value = 'Expected'
+                sheet.cell(row=row_idx, column=8).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 9).value = expected_s[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # State-of-Charge, [MWh]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = node_id
+                sheet.cell(row=row_idx, column=4).value = int(year)
+                sheet.cell(row=row_idx, column=5).value = day
+                sheet.cell(row=row_idx, column=6).value = 'SoC, [MWh]'
+                sheet.cell(row=row_idx, column=7).value = 'Expected'
+                sheet.cell(row=row_idx, column=8).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 9).value = expected_soc[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # State-of-Charge, [%]
+                sheet.cell(row=row_idx, column=1).value = operator_type
+                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                sheet.cell(row=row_idx, column=3).value = node_id
+                sheet.cell(row=row_idx, column=4).value = int(year)
+                sheet.cell(row=row_idx, column=5).value = day
+                sheet.cell(row=row_idx, column=6).value = 'SoC, [%]'
+                sheet.cell(row=row_idx, column=7).value = 'Expected'
+                sheet.cell(row=row_idx, column=8).value = '-'
+                for p in range(network[year][day].num_instants):
+                    sheet.cell(row=row_idx, column=p + 9).value = expected_soc_percent[node_id][p]
+                    sheet.cell(row=row_idx, column=p + 9).number_format = percent_style
+                row_idx = row_idx + 1
+
+    return row_idx
+
+
+def _write_relaxation_slacks_results_to_excel(planning_problem, workbook, results):
+    _write_relaxation_slacks_results_network_operators_to_excel(planning_problem, workbook, results)
+    _write_relaxation_slacks_results_esso_to_excel(planning_problem, workbook, results['esso']['results'])
+    _write_relaxation_slacks_yoy_results_esso_to_excel(planning_problem, workbook, results['esso']['results'])
+
+
+def _write_relaxation_slacks_results_network_operators_to_excel(planning_problem, workbook, results):
+
+    sheet = workbook.create_sheet('Relaxation Slacks TSO, DSOs')
+
+    row_idx = 1
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Operator'
+    sheet.cell(row=row_idx, column=2).value = 'Connection Node ID'
+    sheet.cell(row=row_idx, column=3).value = 'Network Node ID'
+    sheet.cell(row=row_idx, column=4).value = 'Year'
+    sheet.cell(row=row_idx, column=5).value = 'Day'
+    sheet.cell(row=row_idx, column=6).value = 'Quantity'
+    sheet.cell(row=row_idx, column=7).value = 'Market Scenario'
+    sheet.cell(row=row_idx, column=8).value = 'Operation Scenario'
+    for p in range(planning_problem.num_instants):
+        sheet.cell(row=row_idx, column=p + 9).value = p
+    row_idx = row_idx + 1
+
+    # Write results -- TSO
+    tso_results = results['tso']['results']
+    transmission_network = planning_problem.transmission_network.network
+    tn_params = planning_problem.transmission_network.params
+    row_idx = _write_relaxation_slacks_results_per_operator(transmission_network, sheet, 'TSO', row_idx, tso_results, tn_params)
+
+    # Write results -- DSOs
+    for tn_node_id in results['dso']:
+        dso_results = results['dso'][tn_node_id]['results']
+        distribution_network = planning_problem.distribution_networks[tn_node_id].network
+        dn_params = planning_problem.distribution_networks[tn_node_id].params
+        row_idx = _write_relaxation_slacks_results_per_operator(distribution_network, sheet, 'DSO', row_idx, dso_results, dn_params, tn_node_id=tn_node_id)
+
+
+def _write_relaxation_slacks_results_per_operator(network, sheet, operator_type, row_idx, results, params, tn_node_id='-'):
+
+    decimal_style = '0.00'
+
+    for year in results:
+        for day in results[year]:
+            for s_m in results[year][day]['scenarios']:
+                for s_o in results[year][day]['scenarios'][s_m]:
+
+                    # Voltage slacks
+                    if params.slack_voltage_limits:
+                        for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['voltage']['e_up']:
+
+                            # - e_up
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Voltage, e_up'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                e_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['voltage']['e_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = e_up
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # - e_down
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Voltage, e_down'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                e_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['voltage']['e_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = e_down
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # - f_up
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Voltage, f_up'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                f_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['voltage']['f_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = f_up
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # - f_down
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Voltage, f_down'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                f_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['voltage']['f_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = f_down
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                    # Branch current slacks
+                    if params.slack_line_limits:
+
+                        # Current
+                        for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['current']['iij_sqr']:
+
+                            # - Charging
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Current, iij_sqr'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                iij_sqr = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['current']['iij_sqr'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = iij_sqr
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                    # Shared ESS slacks
+                    if params.ess_relax_comp or params.ess_relax_apparent_power or params.ess_relax_soc or params.ess_relax_day_balance:
+
+                        # - Complementarity
+                        if params.ess_relax_comp:
+                            for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['comp']:
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'Shared ESS, Complementarity'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_shared_es_comp = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['comp'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_shared_es_comp
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                        # - Apparent power
+                        if params.ess_relax_apparent_power:
+
+                            for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['sch_up']:
+
+                                # Charging, up
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'Shared ESS, sch_up'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_shared_es_ch_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['sch_up'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_shared_es_ch_up
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                                # Charging, down
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'Shared ESS, sch_down'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_shared_es_ch_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['sch_down'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_shared_es_ch_down
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                                # - Discharging, up
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'Shared ESS, sdch_up'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_shared_es_dch_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['sdch_up'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_shared_es_dch_up
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                                # - Discharging, down
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'Shared ESS, sdch_down'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_shared_es_dch_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['sdch_down'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_shared_es_dch_down
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                            # - SoC
+
+                        # - SoC
+                        if params.ess_relax_soc:
+
+                            for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['soc_up']:
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'Shared ESS, soc_up'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_shared_es_soc = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['soc_up'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_shared_es_soc
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'Shared ESS, soc_down'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_shared_es_soc = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['soc_down'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_shared_es_soc
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                        # - Day balance
+                        if params.ess_relax_day_balance:
+
+                            for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['day_balance_up']:
+
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'Shared ESS, day_balance_up'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_shared_es_day_balance = 0.00
+                                    if p == network[year][day].num_instants - 1:
+                                        slack_shared_es_day_balance = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['day_balance_up'][node_id]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_shared_es_day_balance
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'Shared ESS, day_balance_down'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_shared_es_day_balance = 0.00
+                                    if p == network[year][day].num_instants - 1:
+                                        slack_shared_es_day_balance = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['shared_energy_storages']['day_balance_down'][node_id]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_shared_es_day_balance
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                    # ESS slacks
+                    if params.es_reg and (params.ess_relax_comp or params.ess_relax_apparent_power or params.ess_relax_soc or params.ess_relax_day_balance):
+
+                        # - Complementarity
+                        if params.ess_relax_comp:
+                            for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['comp']:
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'ESS, Complementarity'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_es_comp = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['comp'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_es_comp
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                        # - Apparent power
+                        if params.ess_relax_apparent_power:
+
+                            for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['sch_up']:
+
+                                # Charging, up
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'ESS, sch_up'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_es_ch_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['sch_up'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_es_ch_up
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                                # Charging, down
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'ESS, sch_down'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_es_ch_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['sch_down'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_es_ch_down
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                                # - Discharging, up
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'ESS, sdch_up'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_es_dch_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['sdch_up'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_es_dch_up
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                                # - Discharging, down
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'ESS, sdch_down'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_es_dch_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['sdch_down'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_es_dch_down
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                        # - SoC
+                        if params.ess_relax_soc:
+
+                            for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['soc_up']:
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'ESS, soc_up'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_es_soc = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['soc_up'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_es_soc
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'ESS, soc_down'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_es_soc = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['soc_down'][node_id][p]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_es_soc
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                        # - Day balance
+                        if params.ess_relax_day_balance:
+
+                            for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['day_balance_up']:
+
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'ESS, day_balance_up'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_es_day_balance = 0.00
+                                    if p == network[year][day].num_instants - 1:
+                                        slack_es_day_balance = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['day_balance_up'][node_id]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_es_day_balance
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                                sheet.cell(row=row_idx, column=1).value = operator_type
+                                sheet.cell(row=row_idx, column=2).value = tn_node_id
+                                sheet.cell(row=row_idx, column=3).value = node_id
+                                sheet.cell(row=row_idx, column=4).value = int(year)
+                                sheet.cell(row=row_idx, column=5).value = day
+                                sheet.cell(row=row_idx, column=6).value = 'ESS, day_balance_down'
+                                sheet.cell(row=row_idx, column=7).value = s_m
+                                sheet.cell(row=row_idx, column=8).value = s_o
+                                for p in range(network[year][day].num_instants):
+                                    slack_es_day_balance = 0.00
+                                    if p == network[year][day].num_instants - 1:
+                                        slack_es_day_balance = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['energy_storages']['day_balance_down'][node_id]
+                                    sheet.cell(row=row_idx, column=p + 9).value = slack_es_day_balance
+                                    sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                                row_idx = row_idx + 1
+
+                    # - Flexibility day balance slacks
+                    if params.fl_relax:
+                        for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['flexibility']['day_balance_up']:
+
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Flexibility, balance_up'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                slack_flex_day_balance = 0.00
+                                if p == network[year][day].num_instants - 1:
+                                    slack_flex_day_balance = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['flexibility']['day_balance_up'][node_id]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_flex_day_balance
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Flexibility, balance_down'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                slack_flex_day_balance = 0.00
+                                if p == network[year][day].num_instants - 1:
+                                    slack_flex_day_balance = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['flexibility']['day_balance_down'][node_id]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_flex_day_balance
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                    # - Node balance
+                    if params.node_balance_relax:
+                        for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['node_balance']['p_up']:
+
+                            # p_up
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Node Balance, p_up'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                slack_p_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['node_balance']['p_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_p_up
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # p_down
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Node Balance, p_down'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                slack_p_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['node_balance']['p_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_p_down
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # q_up
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Node Balance, q_up'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                slack_q_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['node_balance']['q_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_q_up
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # q_down
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Node Balance, q_down'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                slack_q_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['node_balance']['q_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_q_down
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                    # Generators' voltage set-point
+                    if params.gen_v_relax:
+                        for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['gen_voltage']['v_up']:
+
+                            # v_up
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Generator voltage, v_up'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                slack_v_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['gen_voltage']['v_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_v_up
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # v_down
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Generator voltage, v_down'
+                            sheet.cell(row=row_idx, column=7).value = s_m
+                            sheet.cell(row=row_idx, column=8).value = s_o
+                            for p in range(network[year][day].num_instants):
+                                slack_v_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['gen_voltage']['v_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_v_down
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                    # Interface
+                    if params.interface_pf_relax:
+                        for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['vmag_sqr_up']:
+
+                            # vmag, up
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Interface, vmag up'
+                            sheet.cell(row=row_idx, column=7).value = 'N/A'
+                            sheet.cell(row=row_idx, column=8).value = 'N/A'
+                            for p in range(network[year][day].num_instants):
+                                slack_v_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['vmag_sqr_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_v_up
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # vmag, down
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Interface, vmag down'
+                            sheet.cell(row=row_idx, column=7).value = 'N/A'
+                            sheet.cell(row=row_idx, column=8).value = 'N/A'
+                            for p in range(network[year][day].num_instants):
+                                slack_v_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['vmag_sqr_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_v_down
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # pf_p, up
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Interface, pf_p up'
+                            sheet.cell(row=row_idx, column=7).value = 'N/A'
+                            sheet.cell(row=row_idx, column=8).value = 'N/A'
+                            for p in range(network[year][day].num_instants):
+                                slack_pf_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['pf_p_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_pf_up
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # pf_p, down
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Interface, pf_p down'
+                            sheet.cell(row=row_idx, column=7).value = 'N/A'
+                            sheet.cell(row=row_idx, column=8).value = 'N/A'
+                            for p in range(network[year][day].num_instants):
+                                slack_pf_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['pf_p_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_pf_down
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # pf_q, up
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Interface, pf_q up'
+                            sheet.cell(row=row_idx, column=7).value = 'N/A'
+                            sheet.cell(row=row_idx, column=8).value = 'N/A'
+                            for p in range(network[year][day].num_instants):
+                                slack_pf_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['pf_q_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_pf_up
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # pf_q, down
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Interface, pf_q down'
+                            sheet.cell(row=row_idx, column=7).value = 'N/A'
+                            sheet.cell(row=row_idx, column=8).value = 'N/A'
+                            for p in range(network[year][day].num_instants):
+                                slack_pf_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['pf_q_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_pf_down
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                    # Shared ESS
+                    if params.interface_ess_relax:
+                        for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['ess_p_up']:
+
+                            # ess_p, up
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Shared ESS, ess_p up'
+                            sheet.cell(row=row_idx, column=7).value = 'N/A'
+                            sheet.cell(row=row_idx, column=8).value = 'N/A'
+                            for p in range(network[year][day].num_instants):
+                                slack_p_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['ess_p_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_p_up
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # ess_p, down
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Shared ESS, ess_p down'
+                            sheet.cell(row=row_idx, column=7).value = 'N/A'
+                            sheet.cell(row=row_idx, column=8).value = 'N/A'
+                            for p in range(network[year][day].num_instants):
+                                slack_p_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['ess_p_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_p_down
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # ess_q, up
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Shared ESS, ess_q up'
+                            sheet.cell(row=row_idx, column=7).value = 'N/A'
+                            sheet.cell(row=row_idx, column=8).value = 'N/A'
+                            for p in range(network[year][day].num_instants):
+                                slack_q_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['ess_q_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_q_up
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # ess_q, down
+                            sheet.cell(row=row_idx, column=1).value = operator_type
+                            sheet.cell(row=row_idx, column=2).value = tn_node_id
+                            sheet.cell(row=row_idx, column=3).value = node_id
+                            sheet.cell(row=row_idx, column=4).value = int(year)
+                            sheet.cell(row=row_idx, column=5).value = day
+                            sheet.cell(row=row_idx, column=6).value = 'Shared ESS, ess_q down'
+                            sheet.cell(row=row_idx, column=7).value = 'N/A'
+                            sheet.cell(row=row_idx, column=8).value = 'N/A'
+                            for p in range(network[year][day].num_instants):
+                                slack_q_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['interface']['ess_q_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 9).value = slack_q_down
+                                sheet.cell(row=row_idx, column=p + 9).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+    return row_idx
+
+
+def _write_relaxation_slacks_results_esso_to_excel(planning_problem, workbook, results):
+
+    sheet = workbook.create_sheet('Relaxation Slacks ESSO')
+    decimal_style = '0.00'
+
+    years = [year for year in planning_problem.years]
+    days = [day for day in planning_problem.days]
+
+    row_idx = 1
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Node ID'
+    sheet.cell(row=row_idx, column=2).value = 'Year'
+    sheet.cell(row=row_idx, column=3).value = 'Day'
+    sheet.cell(row=row_idx, column=4).value = 'Quantity'
+    sheet.cell(row=row_idx, column=5).value = 'Market Scenario'
+    sheet.cell(row=row_idx, column=6).value = 'Operation Scenario'
+    for p in range(planning_problem.num_instants):
+        sheet.cell(row=row_idx, column=p + 7).value = p
+    row_idx = row_idx + 1
+
+    # Feasibility slacks
+    for year in years:
+        for node_id in planning_problem.active_distribution_network_nodes:
+
+            s_up = results[year][days[0]]['scenarios'][0][0]['relaxation_slacks']['slack_s_up'][node_id]
+            sheet.cell(row=row_idx, column=1).value = node_id
+            sheet.cell(row=row_idx, column=2).value = int(year)
+            sheet.cell(row=row_idx, column=3).value = 'N/A'
+            sheet.cell(row=row_idx, column=4).value = 'Feasiblity, s_up'
+            sheet.cell(row=row_idx, column=5).value = 'N/A'
+            sheet.cell(row=row_idx, column=6).value = 'N/A'
+            for p in range(planning_problem.num_instants):
+                sheet.cell(row=row_idx, column=p + 7).value = s_up
+                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+            row_idx = row_idx + 1
+
+            s_down = results[year][days[0]]['scenarios'][0][0]['relaxation_slacks']['slack_s_down'][node_id]
+            sheet.cell(row=row_idx, column=1).value = node_id
+            sheet.cell(row=row_idx, column=2).value = int(year)
+            sheet.cell(row=row_idx, column=3).value = 'N/A'
+            sheet.cell(row=row_idx, column=4).value = 'Feasiblity, s_down'
+            sheet.cell(row=row_idx, column=5).value = 'N/A'
+            sheet.cell(row=row_idx, column=6).value = 'N/A'
+            for p in range(planning_problem.num_instants):
+                sheet.cell(row=row_idx, column=p + 7).value = s_down
+                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+            row_idx = row_idx + 1
+
+            e_up = results[year][days[0]]['scenarios'][0][0]['relaxation_slacks']['slack_e_up'][node_id]
+            sheet.cell(row=row_idx, column=1).value = node_id
+            sheet.cell(row=row_idx, column=2).value = int(year)
+            sheet.cell(row=row_idx, column=3).value = 'N/A'
+            sheet.cell(row=row_idx, column=4).value = 'Feasiblity, e_up'
+            sheet.cell(row=row_idx, column=5).value = 'N/A'
+            sheet.cell(row=row_idx, column=6).value = 'N/A'
+            for p in range(planning_problem.num_instants):
+                sheet.cell(row=row_idx, column=p + 7).value = e_up
+                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+            row_idx = row_idx + 1
+
+            e_down = results[year][days[0]]['scenarios'][0][0]['relaxation_slacks']['slack_e_down'][node_id]
+            sheet.cell(row=row_idx, column=1).value = node_id
+            sheet.cell(row=row_idx, column=2).value = int(year)
+            sheet.cell(row=row_idx, column=3).value = 'N/A'
+            sheet.cell(row=row_idx, column=4).value = 'Feasiblity, e_down'
+            sheet.cell(row=row_idx, column=5).value = 'N/A'
+            sheet.cell(row=row_idx, column=6).value = 'N/A'
+            for p in range(planning_problem.num_instants):
+                sheet.cell(row=row_idx, column=p + 7).value = e_down
+                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+            row_idx = row_idx + 1
+
+    for year in results:
+        for day in results[year]:
+            for s_m in results[year][day]['scenarios']:
+                for s_o in results[year][day]['scenarios'][s_m]:
+
+                    # - Complementarity
+                    if planning_problem.shared_ess_data.params.ess_relax_comp:
+                        for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['comp']:
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'Complementarity'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(planning_problem.num_instants):
+                                es_comp = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['comp'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).value = es_comp
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                    # - Apparent power
+                    if planning_problem.shared_ess_data.params.ess_relax_comp:
+                        for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['sch_up']:
+
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'Sch, up'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(planning_problem.num_instants):
+                                sch_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['sch_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).value = sch_up
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'Sch, down'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(planning_problem.num_instants):
+                                sch_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['sch_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).value = sch_down
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'Sdch, up'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(planning_problem.num_instants):
+                                sdch_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['sdch_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).value = sdch_up
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'Sdch, down'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(planning_problem.num_instants):
+                                sdch_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['sdch_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).value = sdch_down
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                    # - SoC
+                    if planning_problem.shared_ess_data.params.ess_relax_soc:
+                        for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_up']:
+
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'SoC, up'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(planning_problem.num_instants):
+                                soc_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).value = soc_up
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'SoC, down'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(planning_problem.num_instants):
+                                soc_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).value = soc_down
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                    # Day balance
+                    if planning_problem.shared_ess_data.params.ess_relax_day_balance:
+
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = int(year)
+                        sheet.cell(row=row_idx, column=3).value = day
+                        sheet.cell(row=row_idx, column=4).value = 'Day balance, up'
+                        sheet.cell(row=row_idx, column=5).value = s_m
+                        sheet.cell(row=row_idx, column=6).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            balance_up = 0.00
+                            if p == planning_problem.num_instants - 1:
+                                balance_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'][node_id]
+                            sheet.cell(row=row_idx, column=p + 7).value = balance_up
+                            sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                        row_idx = row_idx + 1
+
+                        sheet.cell(row=row_idx, column=1).value = node_id
+                        sheet.cell(row=row_idx, column=2).value = int(year)
+                        sheet.cell(row=row_idx, column=3).value = day
+                        sheet.cell(row=row_idx, column=4).value = 'Day balance, down'
+                        sheet.cell(row=row_idx, column=5).value = s_m
+                        sheet.cell(row=row_idx, column=6).value = s_o
+                        for p in range(planning_problem.num_instants):
+                            balance_down = 0.00
+                            if p == planning_problem.num_instants - 1:
+                                balance_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_down'][node_id]
+                            sheet.cell(row=row_idx, column=p + 7).value = balance_down
+                            sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                        row_idx = row_idx + 1
+
+                    # Expected values
+                    if planning_problem.shared_ess_data.params.ess_interface_relax:
+
+                        for node_id in results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['expected_p_up']:
+
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'Expected P, up'
+                            sheet.cell(row=row_idx, column=5).value = 'N/A'
+                            sheet.cell(row=row_idx, column=6).value = 'N/A'
+                            for p in range(planning_problem.num_instants):
+                                expected_pup = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['expected_p_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).value = expected_pup
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'Expected P, down'
+                            sheet.cell(row=row_idx, column=5).value = 'N/A'
+                            sheet.cell(row=row_idx, column=6).value = 'N/A'
+                            for p in range(planning_problem.num_instants):
+                                expected_pdown = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['expected_p_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).value = expected_pdown
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'Expected Q, up'
+                            sheet.cell(row=row_idx, column=5).value = 'N/A'
+                            sheet.cell(row=row_idx, column=6).value = 'N/A'
+                            for p in range(planning_problem.num_instants):
+                                expected_qup = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['expected_q_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).value = expected_qup
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'Expected Q, down'
+                            sheet.cell(row=row_idx, column=5).value = 'N/A'
+                            sheet.cell(row=row_idx, column=6).value = 'N/A'
+                            for p in range(planning_problem.num_instants):
+                                expected_qdown = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['expected_q_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).value = expected_qdown
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+            # Installed capacity
+            if planning_problem.shared_ess_data.params.ess_relax_installed_capacity:
+
+                for node_id in results[year][day]['scenarios'][0][0]['relaxation_slacks']['srated_up']:
+
+                    sheet.cell(row=row_idx, column=1).value = node_id
+                    sheet.cell(row=row_idx, column=2).value = int(year)
+                    sheet.cell(row=row_idx, column=3).value = day
+                    sheet.cell(row=row_idx, column=4).value = 'Srated, up'
+                    sheet.cell(row=row_idx, column=5).value = 'N/A'
+                    sheet.cell(row=row_idx, column=6).value = 'N/A'
+                    for p in range(planning_problem.num_instants):
+                        srated_up = results[year][day]['scenarios'][0][0]['relaxation_slacks']['srated_up'][node_id]
+                        sheet.cell(row=row_idx, column=p + 7).value = srated_up
+                        sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+                    sheet.cell(row=row_idx, column=1).value = node_id
+                    sheet.cell(row=row_idx, column=2).value = int(year)
+                    sheet.cell(row=row_idx, column=3).value = day
+                    sheet.cell(row=row_idx, column=4).value = 'Srated, down'
+                    sheet.cell(row=row_idx, column=5).value = 'N/A'
+                    sheet.cell(row=row_idx, column=6).value = 'N/A'
+                    for p in range(planning_problem.num_instants):
+                        srated_down = results[year][day]['scenarios'][0][0]['relaxation_slacks']['srated_down'][node_id]
+                        sheet.cell(row=row_idx, column=p + 7).value = srated_down
+                        sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+                    sheet.cell(row=row_idx, column=1).value = node_id
+                    sheet.cell(row=row_idx, column=2).value = int(year)
+                    sheet.cell(row=row_idx, column=3).value = day
+                    sheet.cell(row=row_idx, column=4).value = 'Erated, up'
+                    sheet.cell(row=row_idx, column=5).value = 'N/A'
+                    sheet.cell(row=row_idx, column=6).value = 'N/A'
+                    for p in range(planning_problem.num_instants):
+                        erated_up = results[year][day]['scenarios'][0][0]['relaxation_slacks']['erated_up'][node_id]
+                        sheet.cell(row=row_idx, column=p + 7).value = erated_up
+                        sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+                    sheet.cell(row=row_idx, column=1).value = node_id
+                    sheet.cell(row=row_idx, column=2).value = int(year)
+                    sheet.cell(row=row_idx, column=3).value = day
+                    sheet.cell(row=row_idx, column=4).value = 'Erated, down'
+                    sheet.cell(row=row_idx, column=5).value = 'N/A'
+                    sheet.cell(row=row_idx, column=6).value = 'N/A'
+                    for p in range(planning_problem.num_instants):
+                        erated_down = results[year][day]['scenarios'][0][0]['relaxation_slacks']['erated_down'][node_id]
+                        sheet.cell(row=row_idx, column=p + 7).value = erated_down
+                        sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+            # Capacity available
+            if planning_problem.shared_ess_data.params.ess_relax_capacity_available:
+
+                for node_id in results[year][day]['scenarios'][0][0]['relaxation_slacks']['capacity_available_up']:
+
+                    sheet.cell(row=row_idx, column=1).value = node_id
+                    sheet.cell(row=row_idx, column=2).value = int(year)
+                    sheet.cell(row=row_idx, column=3).value = day
+                    sheet.cell(row=row_idx, column=4).value = 'Eavail, up'
+                    sheet.cell(row=row_idx, column=5).value = 'N/A'
+                    sheet.cell(row=row_idx, column=6).value = 'N/A'
+                    for p in range(planning_problem.num_instants):
+                        eavail_up = results[year][day]['scenarios'][0][0]['relaxation_slacks']['capacity_available_up'][node_id]
+                        sheet.cell(row=row_idx, column=p + 7).value = eavail_up
+                        sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+                    sheet.cell(row=row_idx, column=1).value = node_id
+                    sheet.cell(row=row_idx, column=2).value = int(year)
+                    sheet.cell(row=row_idx, column=3).value = day
+                    sheet.cell(row=row_idx, column=4).value = 'Eavail, up'
+                    sheet.cell(row=row_idx, column=5).value = 'N/A'
+                    sheet.cell(row=row_idx, column=6).value = 'N/A'
+                    for p in range(planning_problem.num_instants):
+                        eavail_down = results[year][day]['scenarios'][0][0]['relaxation_slacks']['capacity_available_up'][node_id]
+                        sheet.cell(row=row_idx, column=p + 7).value = eavail_down
+                        sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+            # Capacity degradation
+            if planning_problem.shared_ess_data.params.ess_relax_capacity_degradation:
+
+                for node_id in results[year][day]['scenarios'][0][0]['relaxation_slacks']['capacity_degradation_up']:
+
+                    sheet.cell(row=row_idx, column=1).value = node_id
+                    sheet.cell(row=row_idx, column=2).value = int(year)
+                    sheet.cell(row=row_idx, column=3).value = day
+                    sheet.cell(row=row_idx, column=4).value = 'Edegr, up'
+                    sheet.cell(row=row_idx, column=5).value = 'N/A'
+                    sheet.cell(row=row_idx, column=6).value = 'N/A'
+                    for p in range(planning_problem.num_instants):
+                        edegr_up = results[year][day]['scenarios'][0][0]['relaxation_slacks']['capacity_degradation_up'][node_id]
+                        sheet.cell(row=row_idx, column=p + 7).value = edegr_up
+                        sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+                    sheet.cell(row=row_idx, column=1).value = node_id
+                    sheet.cell(row=row_idx, column=2).value = int(year)
+                    sheet.cell(row=row_idx, column=3).value = day
+                    sheet.cell(row=row_idx, column=4).value = 'Edegr, down'
+                    sheet.cell(row=row_idx, column=5).value = 'N/A'
+                    sheet.cell(row=row_idx, column=6).value = 'N/A'
+                    for p in range(planning_problem.num_instants):
+                        edegr_down = results[year][day]['scenarios'][0][0]['relaxation_slacks']['capacity_degradation_down'][node_id]
+                        sheet.cell(row=row_idx, column=p + 7).value = edegr_up
+                        sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+            # Secondary reserve
+            if planning_problem.shared_ess_data.params.ess_relax_secondary_reserve:
+
+                sheet.cell(row=row_idx, column=1).value = 'Total'
+                sheet.cell(row=row_idx, column=2).value = int(year)
+                sheet.cell(row=row_idx, column=3).value = day
+                sheet.cell(row=row_idx, column=4).value = 'Secondary reserve, upward, up'
+                sheet.cell(row=row_idx, column=5).value = 'N/A'
+                sheet.cell(row=row_idx, column=6).value = 'N/A'
+                for p in range(planning_problem.num_instants):
+                    pup_total_up = results[year][day]['scenarios'][0][0]['relaxation_slacks']['pup_total_up'][p]
+                    sheet.cell(row=row_idx, column=p + 7).value = pup_total_up
+                    sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                sheet.cell(row=row_idx, column=1).value = 'Total'
+                sheet.cell(row=row_idx, column=2).value = int(year)
+                sheet.cell(row=row_idx, column=3).value = day
+                sheet.cell(row=row_idx, column=4).value = 'Secondary reserve, upward, down'
+                sheet.cell(row=row_idx, column=5).value = 'N/A'
+                sheet.cell(row=row_idx, column=6).value = 'N/A'
+                for p in range(planning_problem.num_instants):
+                    pup_total_down = results[year][day]['scenarios'][0][0]['relaxation_slacks']['pup_total_down'][p]
+                    sheet.cell(row=row_idx, column=p + 7).value = pup_total_down
+                    sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                sheet.cell(row=row_idx, column=1).value = 'Total'
+                sheet.cell(row=row_idx, column=2).value = int(year)
+                sheet.cell(row=row_idx, column=3).value = day
+                sheet.cell(row=row_idx, column=4).value = 'Secondary reserve, downward, up'
+                sheet.cell(row=row_idx, column=5).value = 'N/A'
+                sheet.cell(row=row_idx, column=6).value = 'N/A'
+                for p in range(planning_problem.num_instants):
+                    pdown_total_up = results[year][day]['scenarios'][0][0]['relaxation_slacks']['pdown_total_up'][p]
+                    sheet.cell(row=row_idx, column=p + 7).value = pdown_total_up
+                    sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                sheet.cell(row=row_idx, column=1).value = 'Total'
+                sheet.cell(row=row_idx, column=2).value = int(year)
+                sheet.cell(row=row_idx, column=3).value = day
+                sheet.cell(row=row_idx, column=4).value = 'Secondary reserve, downward, down'
+                sheet.cell(row=row_idx, column=5).value = 'N/A'
+                sheet.cell(row=row_idx, column=6).value = 'N/A'
+                for p in range(planning_problem.num_instants):
+                    pdown_total_down = results[year][day]['scenarios'][0][0]['relaxation_slacks']['pdown_total_down'][p]
+                    sheet.cell(row=row_idx, column=p + 7).value = pdown_total_down
+                    sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                sheet.cell(row=row_idx, column=1).value = 'Total'
+                sheet.cell(row=row_idx, column=2).value = int(year)
+                sheet.cell(row=row_idx, column=3).value = day
+                sheet.cell(row=row_idx, column=4).value = 'Secondary reserve, splitting, up'
+                sheet.cell(row=row_idx, column=5).value = 'N/A'
+                sheet.cell(row=row_idx, column=6).value = 'N/A'
+                for p in range(planning_problem.num_instants):
+                    splitting_up = results[year][day]['scenarios'][0][0]['relaxation_slacks']['splitting_up'][p]
+                    sheet.cell(row=row_idx, column=p + 7).value = splitting_up
+                    sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                sheet.cell(row=row_idx, column=1).value = 'Total'
+                sheet.cell(row=row_idx, column=2).value = int(year)
+                sheet.cell(row=row_idx, column=3).value = day
+                sheet.cell(row=row_idx, column=4).value = 'Secondary reserve, splitting, down'
+                sheet.cell(row=row_idx, column=5).value = 'N/A'
+                sheet.cell(row=row_idx, column=6).value = 'N/A'
+                for p in range(planning_problem.num_instants):
+                    splitting_down = results[year][day]['scenarios'][0][0]['relaxation_slacks']['splitting_down'][p]
+                    sheet.cell(row=row_idx, column=p + 7).value = splitting_down
+                    sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                row_idx = row_idx + 1
+
+    return row_idx
+
+
+def _write_relaxation_slacks_yoy_results_esso_to_excel(planning_problem, workbook, results):
+
+    sheet = workbook.create_sheet('Relaxation Slacks ESSO (2)')
+    decimal_style = '0.00'
+
+    years = [year for year in planning_problem.years]
+    days = [day for day in planning_problem.days]
+
+    row_idx = 1
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Node ID'
+    sheet.cell(row=row_idx, column=2).value = 'From Year'
+    sheet.cell(row=row_idx, column=3).value = 'To Year'
+    sheet.cell(row=row_idx, column=4).value = 'Quantity'
+    sheet.cell(row=row_idx, column=5).value = 'Value'
+    row_idx = row_idx + 1
+
+    if planning_problem.shared_ess_data.params.ess_relax_capacity_relative:
+        for node_id in planning_problem.active_distribution_network_nodes:
+            for from_year in years:
+                for to_year in years:
+
+                    erel_up = results[from_year][days[0]]['scenarios'][0][0]['relaxation_slacks']['relative_capacity_up'][node_id][to_year]
+                    sheet.cell(row=row_idx, column=1).value = node_id
+                    sheet.cell(row=row_idx, column=2).value = int(from_year)
+                    sheet.cell(row=row_idx, column=3).value = int(to_year)
+                    sheet.cell(row=row_idx, column=4).value = 'Erel, up'
+                    sheet.cell(row=row_idx, column=5).value = erel_up
+                    sheet.cell(row=row_idx, column=5).number_format = decimal_style
+                    row_idx = row_idx + 1
+
+                    erel_down = results[from_year][days[0]]['scenarios'][0][0]['relaxation_slacks']['relative_capacity_down'][node_id][to_year]
+                    sheet.cell(row=row_idx, column=1).value = node_id
+                    sheet.cell(row=row_idx, column=2).value = int(from_year)
+                    sheet.cell(row=row_idx, column=3).value = int(to_year)
+                    sheet.cell(row=row_idx, column=4).value = 'Erel, down'
+                    sheet.cell(row=row_idx, column=5).value = erel_down
+                    sheet.cell(row=row_idx, column=5).number_format = decimal_style
+                    row_idx = row_idx + 1
 
 
 # ======================================================================================================================

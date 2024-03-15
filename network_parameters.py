@@ -1,5 +1,4 @@
 from solver_parameters import SolverParameters
-from definitions import *
 from helper_functions import *
 
 

@@ -10,6 +10,7 @@
 	"ess_relax_installed_capacity": true,
 	"ess_relax_capacity_available": true,
 	"ess_relax_capacity_degradation": true,
+	"ess_relax_capacity_relative": true,
 	"ess_relax_secondary_reserve": true,
 	"ess_interface_relax": true,
 	"print_results_to_file": true,
