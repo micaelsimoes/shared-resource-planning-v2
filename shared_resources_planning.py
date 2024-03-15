@@ -799,9 +799,13 @@ def update_shared_energy_storages_coordination_model_and_solve(planning_problem,
                 day = days[d]
                 for p in model.periods:
                     model.dual_p_transm[e, y, d, p].fix(dual_ess['tso'][node_id][year][day]['p'][p])
+                    model.dual_q_transm[e, y, d, p].fix(dual_ess['tso'][node_id][year][day]['q'][p])
                     model.dual_p_distr[e, y, d, p].fix(dual_ess['dso'][node_id][year][day]['p'][p])
+                    model.dual_q_distr[e, y, d, p].fix(dual_ess['dso'][node_id][year][day]['q'][p])
                     model.p_req_transm[e, y, d, p].fix(ess_req['tso'][node_id][year][day]['p'][p])
+                    model.q_req_transm[e, y, d, p].fix(ess_req['tso'][node_id][year][day]['q'][p])
                     model.p_req_distr[e, y, d, p].fix(ess_req['dso'][node_id][year][day]['p'][p])
+                    model.q_req_distr[e, y, d, p].fix(ess_req['dso'][node_id][year][day]['q'][p])
 
     # Solve!
     res = shared_ess_data.optimize(model, from_warm_start=from_warm_start)
@@ -5072,8 +5076,8 @@ def _get_initial_candidate_solution(planning_problem):
             candidate_solution['investment'][node_id][year]['s'] = 0.00
             candidate_solution['investment'][node_id][year]['e'] = 0.00
             candidate_solution['total_capacity'][node_id][year] = dict()
-            candidate_solution['total_capacity'][node_id][year]['s'] = 0.00
-            candidate_solution['total_capacity'][node_id][year]['e'] = 0.00
+            candidate_solution['total_capacity'][node_id][year]['s'] = 1.00
+            candidate_solution['total_capacity'][node_id][year]['e'] = 2.50
     return candidate_solution
 
 
