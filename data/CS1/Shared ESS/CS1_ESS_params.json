@@ -2,7 +2,7 @@
 	"budget": 1e6,
 	"max_capacity": 2.50,
 	"min_pe_factor": 0.10,
-	"max_pe_factor": 4.00,
+	"max_pe_factor": 1.00,
 	"ess_relax_comp": true,
 	"ess_relax_apparent_power": true,
 	"ess_relax_soc": true,

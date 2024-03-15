@@ -55,6 +55,10 @@ class SharedResourcesPlanning:
         filename = os.path.join(self.data_dir, self.params_file)
         self.params.read_parameters_from_file(filename)
 
+    def run_planning_problem(self):
+        print('[INFO] Running PLANNING PROBLEM...')
+        _run_planning_problem(self)
+
     def run_operational_planning(self, candidate_solution=dict(), print_results=False):
         print('[INFO] Running OPERATIONAL PLANNING...')
         if not candidate_solution:
@@ -77,6 +81,86 @@ class SharedResourcesPlanning:
 
     def plot_diagram(self):
         _plot_networkx_diagram(self)
+
+
+# ======================================================================================================================
+#  PLANNING functions
+# ======================================================================================================================
+def _run_planning_problem(planning_problem):
+
+    shared_ess_data = planning_problem.shared_ess_data
+    shared_ess_parameters = shared_ess_data.params
+    benders_parameters = planning_problem.params.benders
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # 0. Initialization
+    iter = 1
+    convergence = False
+    lower_bound = -shared_ess_parameters.budget * 1e3
+    upper_bound = shared_ess_parameters.budget * 1e3
+    lower_bound_evolution = [lower_bound]
+    upper_bound_evolution = [upper_bound]
+    candidate_solution = planning_problem.get_initial_candidate_solution()
+
+    start = time.time()
+    master_problem_model = planning_problem.shared_ess_data.build_master_problem()
+
+    # Benders' main cycle
+    while iter < benders_parameters.num_max_iters and not convergence:
+        print(
+            f'=============================================== ITERATION #{iter} ==============================================')
+        print(f'[INFO] Iter {iter}. LB = {lower_bound}, UB = {upper_bound}')
+
+        _print_candidate_solution(candidate_solution)
+
+        # 1. Subproblem
+        # 1.1. Solve operational planning, with fixed investment variables,
+        # 1.2. Get coupling constraints' sensitivities (subproblem)
+        # 1.3. Get OF value (upper bound) from the subproblem
+        operational_results, lower_level_models, sensitivities, _ = planning_problem.run_operational_planning(candidate_solution, print_results=False)
+        upper_bound = shared_ess_data.compute_primal_value(lower_level_models['esso'])
+        upper_bound_evolution.append(upper_bound)
+
+        #  - Convergence check
+        if isclose(upper_bound, lower_bound, abs_tol=benders_parameters.tol_abs, rel_tol=benders_parameters.tol_rel) or \
+                lower_bound > upper_bound:
+            lower_bound_evolution.append(lower_bound)
+            convergence = True
+            break
+        else:
+            previous_upper_bound = upper_bound_evolution[-1]
+            previous_lower_bound = lower_bound_evolution[-1]
+            if isclose(upper_bound, previous_upper_bound, abs_tol=benders_parameters.tol_abs,
+                       rel_tol=benders_parameters.tol_rel) and \
+                    isclose(upper_bound, previous_lower_bound, abs_tol=benders_parameters.tol_abs,
+                            rel_tol=benders_parameters.tol_rel):
+                lower_bound_evolution.append(lower_bound)
+                convergence = True
+                break
+
+        iter += 1
+
+        # 2. Solve Master problem
+        # 2.1. Add Benders' cut, based on the sensitivities obtained from the subproblem
+        # 2.2. Run master problem optimization
+        # 2.3. Get new capacity values, and the value of alpha (lower bound)
+        shared_ess_data.add_benders_cut(master_problem_model, upper_bound, sensitivities, candidate_solution['investment'])
+        shared_ess_data.optimize(master_problem_model)
+        candidate_solution = shared_ess_data.get_candidate_solution(master_problem_model)
+        lower_bound = pe.value(master_problem_model.alpha)
+        lower_bound_evolution.append(lower_bound)
+
+    if not convergence:
+        print('[WARNING] Convergence not obtained!')
+
+    print('[INFO] Final. LB = {}, UB = {}'.format(lower_bound, upper_bound))
+
+    # Write results
+    end = time.time()
+    total_execution_time = end - start
+    print('[INFO] Execution time: {:.2f} s'.format(total_execution_time))
+    bound_evolution = {'lower_bound': lower_bound_evolution, 'upper_bound': upper_bound_evolution}
+    planning_problem.write_planning_results_to_excel(lower_level_models, operational_results, bound_evolution, execution_time=total_execution_time)
 
 
 # ======================================================================================================================
@@ -4991,6 +5075,30 @@ def _get_initial_candidate_solution(planning_problem):
             candidate_solution['total_capacity'][node_id][year]['s'] = 0.00
             candidate_solution['total_capacity'][node_id][year]['e'] = 0.00
     return candidate_solution
+
+
+def _print_candidate_solution(candidate_solution):
+
+    print('[INFO] Candidate solution:')
+
+    # Header
+    print('\t\t{:3}\t{:10}\t'.format('', 'Capacity'), end='')
+    for node_id in candidate_solution['total_capacity']:
+        for year in candidate_solution['total_capacity'][node_id]:
+            print(f'{year}\t', end='')
+        print()
+        break
+
+    # Values
+    for node_id in candidate_solution['total_capacity']:
+        print('\t\t{:3}\t{:10}\t'.format(node_id, 'S, [MVA]'), end='')
+        for year in candidate_solution['total_capacity'][node_id]:
+            print("{:.3f}\t".format(candidate_solution['total_capacity'][node_id][year]['s']), end='')
+        print()
+        print('\t\t{:3}\t{:10}\t'.format(node_id, 'E, [MVAh]'), end='')
+        for year in candidate_solution['total_capacity'][node_id]:
+            print("{:.3f}\t".format(candidate_solution['total_capacity'][node_id][year]['e']), end='')
+        print()
 
 
 def _add_shared_energy_storage_to_transmission_network(planning_problem):

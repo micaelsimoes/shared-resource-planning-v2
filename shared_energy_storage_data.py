@@ -54,12 +54,45 @@ class SharedEnergyStorageData:
                 shared_energy_storage.dn_name = planning_problem.distribution_networks[node_id].name
                 self.shared_energy_storages[year].append(shared_energy_storage)
 
+    def build_master_problem(self):
+        return _build_master_problem(self)
+
     def build_subproblem(self):
         return _build_subproblem_model(self)
+
+    def add_benders_cut(self, model, upper_bound, sensitivities, candidate_solution):
+        years = [year for year in self.years]
+        benders_cut = upper_bound
+        idx = 0
+        for e in model.energy_storages:
+            for y in model.years:
+                year = years[y]
+                node_id = self.shared_energy_storages[year][e].bus
+                benders_cut += sensitivities['s'][idx] * (model.es_s_invesment[e, y] - candidate_solution[node_id][year]['s'])
+                benders_cut += sensitivities['e'][idx] * (model.es_e_invesment[e, y] - candidate_solution[node_id][year]['e'])
+                idx += 1
+        model.benders_cuts.add(model.alpha >= benders_cut)
 
     def optimize(self, model, from_warm_start=False):
         print('[INFO] \t\t - Running Shared ESS optimization...')
         return _optimize(model, self.params.solver_params, from_warm_start=from_warm_start)
+
+    def get_candidate_solution(self, model):
+        years = [year for year in self.years]
+        candidate_solution = {'investment': {}, 'total_capacity': {}}
+        for e in model.energy_storages:
+            node_id = self.shared_energy_storages[years[0]][e].bus
+            candidate_solution['investment'][node_id] = dict()
+            candidate_solution['total_capacity'][node_id] = dict()
+            for y in model.years:
+                year = years[y]
+                candidate_solution['investment'][node_id][year] = dict()
+                candidate_solution['investment'][node_id][year]['s'] = abs(pe.value(model.es_s_invesment[e, y]))
+                candidate_solution['investment'][node_id][year]['e'] = abs(pe.value(model.es_e_invesment[e, y]))
+                candidate_solution['total_capacity'][node_id][year] = dict()
+                candidate_solution['total_capacity'][node_id][year]['s'] = abs(pe.value(model.es_s_rated[e, y]))
+                candidate_solution['total_capacity'][node_id][year]['e'] = abs(pe.value(model.es_e_rated[e, y]))
+        return candidate_solution
 
     def update_model_with_candidate_solution(self, model, candidate_solution):
         _update_model_with_candidate_solution(self, model, candidate_solution)
@@ -81,6 +114,101 @@ class SharedEnergyStorageData:
                 return i
         print(f'[ERROR] Network {self.name}. Node {node_id} does not have a shared energy storage system! Check network.')
         exit(ERROR_NETWORK_FILE)
+
+
+# ======================================================================================================================
+#  MASTER PROBLEM  functions
+# ======================================================================================================================
+def _build_master_problem(shared_ess_data):
+
+    params = shared_ess_data.params
+    years = [year for year in shared_ess_data.years]
+
+    model = pe.ConcreteModel()
+    model.name = "ESS Optimization -- Benders' Master Problem"
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Sets
+    model.years = range(len(shared_ess_data.years))
+    model.energy_storages = range(len(shared_ess_data.active_distribution_network_nodes))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Decision variables
+    model.es_s_invesment = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)   # Investment in power capacity in year y
+    model.es_e_invesment = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)   # Investment in energy capacity in year y
+    model.es_s_rated = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)       # Total rated power capacity (considering calendar life)
+    model.es_e_rated = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)       # Total rated energy capacity (considering calendar life, not considering degradation)
+    model.alpha = pe.Var(domain=pe.Reals)                                                           # alpha (associated with cuts) will try to rebuild y in the original problem
+    model.alpha.setlb(-shared_ess_data.params.budget * 1e3)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Constraints
+    # - Yearly Power and Energy ratings as a function of yearly investments
+    model.rated_s_capacity = pe.ConstraintList()
+    model.rated_e_capacity = pe.ConstraintList()
+    for e in model.energy_storages:
+        total_s_capacity_per_year = [0.0 for _ in model.years]
+        total_e_capacity_per_year = [0.0 for _ in model.years]
+        for y in model.years:
+            year = years[y]
+            num_years = shared_ess_data.years[year]
+            shared_energy_storage = shared_ess_data.shared_energy_storages[year][e]
+            tcal_norm = round(shared_energy_storage.t_cal / num_years)
+            max_tcal_norm = min(y + tcal_norm, len(shared_ess_data.years))
+            for x in range(y, max_tcal_norm):
+                total_s_capacity_per_year[x] += model.es_s_invesment[e, y]
+                total_e_capacity_per_year[x] += model.es_e_invesment[e, y]
+        for y in model.years:
+            model.rated_s_capacity.add(model.es_s_rated[e, y] == total_s_capacity_per_year[y])
+            model.rated_e_capacity.add(model.es_e_rated[e, y] == total_e_capacity_per_year[y])
+
+    # - Maximum Energy Capacity (related to space constraints)
+    model.energy_storage_maximum_capacity = pe.ConstraintList()
+    for e in model.energy_storages:
+        for y in model.years:
+            model.energy_storage_maximum_capacity.add(model.es_e_rated[e, y] <= params.max_capacity)
+
+    # - P/E factor
+    model.energy_storage_power_to_energy_factor = pe.ConstraintList()
+    for e in model.energy_storages:
+        for y in model.years:
+            model.energy_storage_power_to_energy_factor.add(model.es_s_rated[e, y] >= model.es_e_rated[e, y] * params.min_pe_factor)
+            model.energy_storage_power_to_energy_factor.add(model.es_s_rated[e, y] <= model.es_e_rated[e, y] * params.max_pe_factor)
+
+    # - Maximum Investment Cost
+    investment_cost_total = 0.0
+    model.energy_storage_investment = pe.ConstraintList()
+    for y in model.years:
+        year = years[y]
+        c_inv_s = shared_ess_data.cost_investment['power_capacity'][year]
+        c_inv_e = shared_ess_data.cost_investment['energy_capacity'][year]
+        annualization = 1 / ((1 + shared_ess_data.discount_factor) ** (int(year) - int(years[0])))
+        for e in model.energy_storages:
+            investment_cost_total += annualization * model.es_s_invesment[e, y] * c_inv_s
+            investment_cost_total += annualization * model.es_e_invesment[e, y] * c_inv_e
+    model.energy_storage_investment.add(investment_cost_total <= params.budget)
+
+    # Benders' cuts
+    model.benders_cuts = pe.ConstraintList()
+
+    # Objective function
+    investment_cost = 0.0
+    for e in model.energy_storages:
+        for y in model.years:
+
+            year = years[y]
+            c_inv_s = shared_ess_data.cost_investment['power_capacity'][year]
+            c_inv_e = shared_ess_data.cost_investment['energy_capacity'][year]
+            annualization = 1 / ((1 + shared_ess_data.discount_factor) ** (int(year) - int(years[0])))
+
+            # Investment Cost
+            investment_cost += annualization * model.es_s_invesment[e, y] * c_inv_s
+            investment_cost += annualization * model.es_e_invesment[e, y] * c_inv_e
+
+    obj = investment_cost + model.alpha
+    model.objective = pe.Objective(sense=pe.minimize, expr=obj)
+
+    return model
 
 
 # ======================================================================================================================
@@ -707,7 +835,7 @@ def _get_investment_costs_from_excel_file(filename, sheet_name, num_years):
 
         for i in range(num_years):
 
-            year = str(int(df.iloc[0, i + 1]))
+            year = int(df.iloc[0, i + 1])
 
             if is_number(df.iloc[1, i + 1]):
                 data['power_capacity'][year] = float(df.iloc[1, i + 1])
