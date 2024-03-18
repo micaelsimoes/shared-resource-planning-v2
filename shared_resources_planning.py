@@ -644,8 +644,6 @@ def update_distribution_models_to_admm(distribution_networks, models, initial_in
 
 def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
 
-    repr_years = [year for year in shared_ess_data.years]
-
     # Add ADMM variables
     model.rho = pe.Var(domain=pe.NonNegativeReals)
     model.rho.fix(params.rho['ess']['esso'])
