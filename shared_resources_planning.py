@@ -1026,8 +1026,8 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
                     dual_vars['esso'][node_id][year][day]['q'][t] += params.rho['ess']['esso'] * (shared_ess_vars['esso'][node_id][year][day]['q'][t] - shared_ess_vars['tso_dso'][node_id][year][day]['q'][p])
                     dual_vars['tso'][node_id][year][day]['p'][t] += params.rho['ess'][transmission_network.name] * (shared_ess_vars['tso'][node_id][year][day]['p'][t] - shared_ess_vars['esso'][node_id][year][day]['p'][p])
                     dual_vars['tso'][node_id][year][day]['q'][t] += params.rho['ess'][transmission_network.name] * (shared_ess_vars['tso'][node_id][year][day]['q'][t] - shared_ess_vars['esso'][node_id][year][day]['q'][p])
-                    dual_vars['dso'][node_id][year][day]['p'][t] += params.rho['ess'][distribution_network.name] * (shared_ess_vars['tso'][node_id][year][day]['p'][t] - shared_ess_vars['esso'][node_id][year][day]['p'][p])
-                    dual_vars['dso'][node_id][year][day]['q'][t] += params.rho['ess'][distribution_network.name] * (shared_ess_vars['tso'][node_id][year][day]['q'][t] - shared_ess_vars['esso'][node_id][year][day]['q'][p])
+                    dual_vars['dso'][node_id][year][day]['p'][t] += params.rho['ess'][distribution_network.name] * (shared_ess_vars['dso'][node_id][year][day]['p'][t] - shared_ess_vars['esso'][node_id][year][day]['p'][p])
+                    dual_vars['dso'][node_id][year][day]['q'][t] += params.rho['ess'][distribution_network.name] * (shared_ess_vars['dso'][node_id][year][day]['q'][t] - shared_ess_vars['esso'][node_id][year][day]['q'][p])
                     dual_vars['tso_dso'][node_id][year][day]['p'][t] += (dual_vars['tso'][node_id][year][day]['p'][t] + dual_vars['dso'][node_id][year][day]['p'][t]) * 0.50
                     dual_vars['tso_dso'][node_id][year][day]['q'][t] += (dual_vars['tso'][node_id][year][day]['q'][t] + dual_vars['dso'][node_id][year][day]['q'][t]) * 0.50
 
