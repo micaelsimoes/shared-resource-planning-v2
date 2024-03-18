@@ -348,6 +348,7 @@ def create_admm_variables(planning_problem):
             consensus_variables['interface']['pf']['dso'][node_id][year] = dict()
             consensus_variables['ess']['tso'][node_id][year] = dict()
             consensus_variables['ess']['dso'][node_id][year] = dict()
+            consensus_variables['ess']['tso_dso'][node_id][year] = dict()
             consensus_variables['ess']['esso'][node_id][year] = dict()
 
             dual_variables['pf']['tso'][node_id][year] = dict()
@@ -361,7 +362,6 @@ def create_admm_variables(planning_problem):
             consensus_variables_prev_iter['interface']['pf']['dso'][node_id][year] = dict()
             consensus_variables_prev_iter['ess']['tso'][node_id][year] = dict()
             consensus_variables_prev_iter['ess']['dso'][node_id][year] = dict()
-            consensus_variables_prev_iter['ess']['tso_dso'][node_id][year] = dict()
             consensus_variables_prev_iter['ess']['esso'][node_id][year] = dict()
 
             for day in planning_problem.days:
