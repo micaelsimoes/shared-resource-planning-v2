@@ -193,7 +193,7 @@ def _run_operational_planning(planning_problem, candidate_solution):
     tso_model = create_transmission_network_model(transmission_network, consensus_vars['interface']['v'], consensus_vars['interface']['pf'], consensus_vars['ess']['tso'], candidate_solution['total_capacity'])
     update_transmission_model_to_admm(transmission_network, tso_model, consensus_vars['interface']['pf'], admm_parameters)
 
-    esso_model = create_shared_energy_storage_model(shared_ess_data, candidate_solution['investment'])
+    esso_model = create_shared_energy_storage_model(shared_ess_data, consensus_vars['ess']['esso'], candidate_solution['investment'])
     update_shared_energy_storage_model_to_admm(shared_ess_data, esso_model, admm_parameters)
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -466,11 +466,26 @@ def create_distribution_networks_models(distribution_networks, interface_vars, s
     return dso_models
 
 
-def create_shared_energy_storage_model(shared_ess_data, candidate_solution):
+def create_shared_energy_storage_model(shared_ess_data, sess_vars, candidate_solution):
+
+    years = [year for year in shared_ess_data.years]
+    days = [day for day in shared_ess_data.days]
 
     esso_model = shared_ess_data.build_subproblem()
     shared_ess_data.update_model_with_candidate_solution(esso_model, candidate_solution)
     shared_ess_data.optimize(esso_model)
+
+    for e in esso_model.energy_storages:
+        node_id = shared_ess_data.active_distribution_network_nodes[e]
+        for y in esso_model.years:
+            year = years[y]
+            for d in esso_model.days:
+                day = days[d]
+                for p in esso_model.periods:
+                    shared_ess_p = pe.value(esso_model.es_expected_p[e, y, d, p])
+                    shared_ess_q = pe.value(esso_model.es_expected_q[e, y, d, p])
+                    sess_vars[node_id][year][day]['p'][p] = shared_ess_p
+                    sess_vars[node_id][year][day]['q'][p] = shared_ess_q
 
     return esso_model
 
@@ -651,7 +666,7 @@ def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
     for e in model.energy_storages:
         for y in model.years:
             year = repr_years[y]
-            rating_s = shared_ess_data.shared_energy_storages[year][e].s
+            rating_s = pe.value(model.es_s_rated[e, y])
             if rating_s == 0.0:
                 rating_s = 1.00     # Do not balance residuals
             for d in model.days:
@@ -5079,8 +5094,8 @@ def _get_initial_candidate_solution(planning_problem):
         candidate_solution['total_capacity'][node_id] = dict()
         for year in planning_problem.years:
             candidate_solution['investment'][node_id][year] = dict()
-            candidate_solution['investment'][node_id][year]['s'] = 0.00
-            candidate_solution['investment'][node_id][year]['e'] = 0.00
+            candidate_solution['investment'][node_id][year]['s'] = 1.00
+            candidate_solution['investment'][node_id][year]['e'] = 2.50
             candidate_solution['total_capacity'][node_id][year] = dict()
             candidate_solution['total_capacity'][node_id][year]['s'] = 1.00
             candidate_solution['total_capacity'][node_id][year]['e'] = 2.50
