@@ -59,11 +59,11 @@ class SharedResourcesPlanning:
         print('[INFO] Running PLANNING PROBLEM...')
         _run_planning_problem(self)
 
-    def run_operational_planning(self, candidate_solution=dict(), print_results=False):
+    def run_operational_planning(self, candidate_solution=dict(), print_results=False, debug_flag=False):
         print('[INFO] Running OPERATIONAL PLANNING...')
         if not candidate_solution:
             candidate_solution = self.get_initial_candidate_solution()
-        results, models, sensitivities, primal_evolution = _run_operational_planning(self, candidate_solution)
+        results, models, sensitivities, primal_evolution = _run_operational_planning(self, candidate_solution, debug_flag=debug_flag)
         if print_results:
             self.write_operational_planning_results_to_excel(models, results, primal_evolution)
         return results, models, sensitivities, primal_evolution
@@ -166,7 +166,7 @@ def _run_planning_problem(planning_problem):
 # ======================================================================================================================
 #  OPERATIONAL PLANNING functions
 # ======================================================================================================================
-def _run_operational_planning(planning_problem, candidate_solution):
+def _run_operational_planning(planning_problem, candidate_solution, debug_flag=False):
 
     transmission_network = planning_problem.transmission_network
     distribution_networks = planning_problem.distribution_networks
@@ -199,20 +199,21 @@ def _run_operational_planning(planning_problem, candidate_solution):
     planning_problem.update_admm_consensus_variables(tso_model, dso_models, esso_model,
                                                      consensus_vars, dual_vars, consensus_vars_prev_iter,
                                                      admm_parameters)
-    for node_id in planning_problem.active_distribution_network_nodes:
-        print(f"Node {node_id}")
-        for year in consensus_vars['ess']['tso'][node_id]:
-            print(f"\tYear {year}")
-            for day in consensus_vars['ess']['tso'][node_id][year]:
-                print(f"\t\tDay {day}")
-                print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
-                print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
-                print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
-                print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
-                print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
-                print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
-                print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
-                print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
+    if debug_flag:
+        for node_id in planning_problem.active_distribution_network_nodes:
+            print(f"Node {node_id}")
+            for year in consensus_vars['ess']['tso'][node_id]:
+                print(f"\tYear {year}")
+                for day in consensus_vars['ess']['tso'][node_id][year]:
+                    print(f"\t\tDay {day}")
+                    print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
+                    print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
+                    print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
+                    print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
+                    print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
+                    print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
+                    print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
+                    print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
 
     # ------------------------------------------------------------------------------------------------------------------
     # ADMM -- Main cycle
@@ -235,20 +236,21 @@ def _run_operational_planning(planning_problem, candidate_solution):
         planning_problem.update_admm_consensus_variables(tso_model, dso_models, esso_model,
                                                          consensus_vars, dual_vars, consensus_vars_prev_iter,
                                                          admm_parameters)
-        for node_id in planning_problem.active_distribution_network_nodes:
-            print(f"Node {node_id}")
-            for year in consensus_vars['ess']['tso'][node_id]:
-                print(f"\tYear {year}")
-                for day in consensus_vars['ess']['tso'][node_id][year]:
-                    print(f"\t\tDay {day}")
-                    print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
-                    print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
-                    print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
-                    print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
+        if debug_flag:
+            for node_id in planning_problem.active_distribution_network_nodes:
+                print(f"Node {node_id}")
+                for year in consensus_vars['ess']['tso'][node_id]:
+                    print(f"\tYear {year}")
+                    for day in consensus_vars['ess']['tso'][node_id][year]:
+                        print(f"\t\tDay {day}")
+                        print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
+                        print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
+                        print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
+                        print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
 
         # 2.2 Update primal evolution
         primal_evolution.append(compute_primal_value(planning_problem, tso_model, dso_models, esso_model))
@@ -271,20 +273,21 @@ def _run_operational_planning(planning_problem, candidate_solution):
         planning_problem.update_admm_consensus_variables(tso_model, dso_models, esso_model,
                                                          consensus_vars, dual_vars, consensus_vars_prev_iter,
                                                          admm_parameters)
-        for node_id in planning_problem.active_distribution_network_nodes:
-            print(f"Node {node_id}")
-            for year in consensus_vars['ess']['tso'][node_id]:
-                print(f"\tYear {year}")
-                for day in consensus_vars['ess']['tso'][node_id][year]:
-                    print(f"\t\tDay {day}")
-                    print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
-                    print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
-                    print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
-                    print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
+        if debug_flag:
+            for node_id in planning_problem.active_distribution_network_nodes:
+                print(f"Node {node_id}")
+                for year in consensus_vars['ess']['tso'][node_id]:
+                    print(f"\tYear {year}")
+                    for day in consensus_vars['ess']['tso'][node_id][year]:
+                        print(f"\t\tDay {day}")
+                        print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
+                        print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
+                        print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
+                        print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
 
         # 3.2 Update primal evolution
         primal_evolution.append(compute_primal_value(planning_problem, tso_model, dso_models, esso_model))
@@ -304,20 +307,21 @@ def _run_operational_planning(planning_problem, candidate_solution):
         planning_problem.update_admm_consensus_variables(tso_model, dso_models, esso_model,
                                                          consensus_vars, dual_vars, consensus_vars_prev_iter,
                                                          admm_parameters)
-        for node_id in planning_problem.active_distribution_network_nodes:
-            print(f"Node {node_id}")
-            for year in consensus_vars['ess']['tso'][node_id]:
-                print(f"\tYear {year}")
-                for day in consensus_vars['ess']['tso'][node_id][year]:
-                    print(f"\t\tDay {day}")
-                    print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
-                    print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
-                    print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
-                    print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
+        if debug_flag:
+            for node_id in planning_problem.active_distribution_network_nodes:
+                print(f"Node {node_id}")
+                for year in consensus_vars['ess']['tso'][node_id]:
+                    print(f"\tYear {year}")
+                    for day in consensus_vars['ess']['tso'][node_id][year]:
+                        print(f"\t\tDay {day}")
+                        print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
+                        print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
+                        print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
+                        print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
+                        print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
 
         # 4.2 Update primal evolution
         primal_evolution.append(compute_primal_value(planning_problem, tso_model, dso_models, esso_model))
