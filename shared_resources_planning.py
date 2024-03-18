@@ -651,21 +651,16 @@ def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
     model.rho.fix(params.rho['ess']['esso'])
 
     # Active and Reactive power requested by TSO and DSOs
-    model.p_req_transm = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)   # Active power - transmission network
-    model.q_req_transm = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)   # Active power - transmission network
-    model.p_req_distr = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)    # Reactive power - distribution networks
-    model.q_req_distr = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)    # Reactive power - distribution networks
-    model.dual_p_transm = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)  # Dual variable - active power - transmission network
-    model.dual_q_transm = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)  # Dual variable - reactive power - transmission network
-    model.dual_p_distr = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)   # Dual variable - active power - distribution networks
-    model.dual_q_distr = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)   # Dual variable - reactive power - distribution networks
+    model.p_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)   # Active power
+    model.q_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)   # Reactive power
+    model.dual_p = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)  # Dual variables - active power
+    model.dual_q = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)  # Dual variables - reactive power
 
     # Objective function - augmented Lagrangian
     init_of_value = pe.value(model.objective)
     obj = model.objective.expr / abs(init_of_value)
     for e in model.energy_storages:
         for y in model.years:
-            year = repr_years[y]
             rating_s = pe.value(model.es_s_rated[e, y])
             if rating_s == 0.0:
                 rating_s = 1.00     # Do not balance residuals
@@ -673,18 +668,12 @@ def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
                 for p in model.periods:
                     p_ess = model.es_expected_p[e, y, d, p]
                     q_ess = model.es_expected_q[e, y, d, p]
-                    constraint_p_transm = (p_ess - model.p_req_transm[e, y, d, p]) / (2 * rating_s)
-                    constraint_q_transm = (q_ess - model.q_req_transm[e, y, d, p]) / (2 * rating_s)
-                    constraint_p_distr = (p_ess - model.p_req_distr[e, y, d, p]) / (2 * rating_s)
-                    constraint_q_distr = (q_ess - model.q_req_distr[e, y, d, p]) / (2 * rating_s)
-                    obj += model.dual_p_transm[e, y, d, p] * (constraint_p_transm)
-                    obj += model.dual_q_transm[e, y, d, p] * (constraint_q_transm)
-                    obj += model.dual_p_distr[e, y, d, p] * (constraint_p_distr)
-                    obj += model.dual_q_distr[e, y, d, p] * (constraint_q_distr)
-                    obj += (model.rho / 2) * (constraint_p_transm) ** 2
-                    obj += (model.rho / 2) * (constraint_q_transm) ** 2
-                    obj += (model.rho / 2) * (constraint_p_distr) ** 2
-                    obj += (model.rho / 2) * (constraint_q_distr) ** 2
+                    constraint_p_req = (p_ess - model.p_req[e, y, d, p]) / (2 * rating_s)
+                    constraint_q_req = (q_ess - model.q_req[e, y, d, p]) / (2 * rating_s)
+                    obj += model.dual_p[e, y, d, p] * (constraint_p_req)
+                    obj += model.dual_q[e, y, d, p] * (constraint_q_req)
+                    obj += (model.rho / 2) * (constraint_p_req) ** 2
+                    obj += (model.rho / 2) * (constraint_q_req) ** 2
 
     model.objective.expr = obj
 
