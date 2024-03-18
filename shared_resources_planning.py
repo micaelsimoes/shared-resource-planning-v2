@@ -203,7 +203,7 @@ def _run_operational_planning(planning_problem, candidate_solution):
         print(f"Node {node_id}")
         for year in consensus_vars['ess']['tso'][node_id]:
             for day in consensus_vars['ess']['tso'][node_id][year]:
-                print("\tTSO,     P = {:.4f}".format(consensus_vars['ess']['tso'][node_id][year][day]['p']))
+                print(f"\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
                 print(f"\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
                 print(f"\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
                 print(f"\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
