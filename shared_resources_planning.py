@@ -196,6 +196,10 @@ def _run_operational_planning(planning_problem, candidate_solution):
     esso_model = create_shared_energy_storage_model(shared_ess_data, consensus_vars['ess']['esso'], candidate_solution['investment'])
     update_shared_energy_storage_model_to_admm(shared_ess_data, esso_model, admm_parameters)
 
+    planning_problem.update_admm_consensus_variables(tso_model, dso_models, esso_model,
+                                                     consensus_vars, dual_vars, consensus_vars_prev_iter,
+                                                     admm_parameters)
+
     # ------------------------------------------------------------------------------------------------------------------
     # ADMM -- Main cycle
     # ------------------------------------------------------------------------------------------------------------------
@@ -298,12 +302,13 @@ def create_admm_variables(planning_problem):
             'v': dict(),
             'pf': {'tso': dict(), 'dso': dict()}
         },
-        'ess': {'tso': dict(), 'dso': dict(), 'esso': dict(), 'capacity': {'s': dict(), 'e': dict()}}
+        'ess': {'tso': dict(), 'dso': dict(), 'tso_dso': dict(), 'esso': dict(),
+                'capacity': {'s': dict(), 'e': dict()}}
     }
 
     dual_variables = {
         'pf': {'tso': dict(), 'dso': dict()},
-        'ess': {'tso': dict(), 'dso': dict()}
+        'ess': {'tso_dso': dict(), 'esso': dict()}
     }
 
     consensus_variables_prev_iter = {
@@ -320,12 +325,13 @@ def create_admm_variables(planning_problem):
         consensus_variables['interface']['pf']['dso'][node_id] = dict()
         consensus_variables['ess']['tso'][node_id] = dict()
         consensus_variables['ess']['dso'][node_id] = dict()
+        consensus_variables['ess']['tso_dso'][node_id] = dict()
         consensus_variables['ess']['esso'][node_id] = dict()
 
         dual_variables['pf']['tso'][node_id] = dict()
         dual_variables['pf']['dso'][node_id] = dict()
-        dual_variables['ess']['tso'][node_id] = dict()
-        dual_variables['ess']['dso'][node_id] = dict()
+        dual_variables['ess']['tso_dso'][node_id] = dict()
+        dual_variables['ess']['esso'][node_id] = dict()
 
         consensus_variables_prev_iter['interface']['pf']['tso'][node_id] = dict()
         consensus_variables_prev_iter['interface']['pf']['dso'][node_id] = dict()
@@ -340,12 +346,13 @@ def create_admm_variables(planning_problem):
             consensus_variables['interface']['pf']['dso'][node_id][year] = dict()
             consensus_variables['ess']['tso'][node_id][year] = dict()
             consensus_variables['ess']['dso'][node_id][year] = dict()
+            consensus_variables['ess']['tso_dso'][node_id][year] = dict()
             consensus_variables['ess']['esso'][node_id][year] = dict()
 
             dual_variables['pf']['tso'][node_id][year] = dict()
             dual_variables['pf']['dso'][node_id][year] = dict()
-            dual_variables['ess']['tso'][node_id][year] = dict()
-            dual_variables['ess']['dso'][node_id][year] = dict()
+            dual_variables['ess']['tso_dso'][node_id][year] = dict()
+            dual_variables['ess']['esso'][node_id][year] = dict()
 
             consensus_variables_prev_iter['interface']['pf']['tso'][node_id][year] = dict()
             consensus_variables_prev_iter['interface']['pf']['dso'][node_id][year] = dict()
@@ -360,12 +367,13 @@ def create_admm_variables(planning_problem):
                 consensus_variables['interface']['pf']['dso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
                 consensus_variables['ess']['tso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
                 consensus_variables['ess']['dso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
+                consensus_variables['ess']['tso_dso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
                 consensus_variables['ess']['esso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
 
                 dual_variables['pf']['tso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
                 dual_variables['pf']['dso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
-                dual_variables['ess']['tso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
-                dual_variables['ess']['dso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
+                dual_variables['ess']['tso_dso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
+                dual_variables['ess']['esso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
 
                 consensus_variables_prev_iter['interface']['pf']['tso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
                 consensus_variables_prev_iter['interface']['pf']['dso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
@@ -900,6 +908,7 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
 
         dso_model = dso_models[node_id]
         distribution_network = distribution_networks[node_id]
+        rho_tso_dso = (params.rho['ess'][transmission_network.name] + params.rho['ess'][distribution_network.name]) * 0.50
 
         # Shared Energy Storage - Power requested by ESSO, and Capacity available
         for y in sess_model.years:
@@ -914,7 +923,7 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
                     shared_ess_vars['esso'][node_id][year][day]['q'][p] = pe.value(sess_model.es_expected_q[shared_ess_idx, y, d, p])
 
         # Shared Energy Storage - Power requested by TSO
-        for y in range(len(planning_problem.years)):
+        for y in range(len(repr_years)):
             year = repr_years[y]
             for d in range(len(repr_days)):
                 day = repr_days[d]
@@ -927,7 +936,7 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
                     shared_ess_vars['tso'][node_id][year][day]['q'][p] = pe.value(tso_model[year][day].expected_shared_ess_q[shared_ess_idx, p]) * s_base
 
         # Shared Energy Storage - Power requested by DSO
-        for y in range(len(planning_problem.years)):
+        for y in range(len(repr_years)):
             year = repr_years[y]
             for d in range(len(repr_days)):
                 day = repr_days[d]
@@ -938,26 +947,30 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
                     shared_ess_vars['dso'][node_id][year][day]['p'][p] = pe.value(dso_model[year][day].expected_shared_ess_p[p]) * s_base
                     shared_ess_vars['dso'][node_id][year][day]['q'][p] = pe.value(dso_model[year][day].expected_shared_ess_q[p]) * s_base
 
-        '''
-        for year in planning_problem.years:
-            for day in planning_problem.days:
-                print(f"Preq, TN, Node {node_id}, {year}, {day} = {shared_ess_vars['tso'][node_id][year][day]['p']}")
-                print(f"Preq, DN, Node {node_id}, {year}, {day} = {shared_ess_vars['dso'][node_id][year][day]['p']}")
-                print(f"Preq, ESS, Node {node_id}, {year}, {day} = {shared_ess_vars['esso'][node_id][year][day]['p']}")
-        '''
+        for y in range(len(planning_problem.years)):
+            year = repr_years[y]
+            for d in range(len(repr_days)):
+                day = repr_days[d]
+                shared_ess_vars['tso_dso'][node_id][year][day]['p'] = [0.0 for _ in range(planning_problem.num_instants)]
+                shared_ess_vars['tso_dso'][node_id][year][day]['q'] = [0.0 for _ in range(planning_problem.num_instants)]
+                for p in dso_model[year][day].periods:
+                    preq_tso = shared_ess_vars['tso'][node_id][year][day]['p'][p]
+                    preq_dso = shared_ess_vars['dso'][node_id][year][day]['p'][p]
+                    qreq_tso = shared_ess_vars['tso'][node_id][year][day]['q'][p]
+                    qreq_dso = shared_ess_vars['dso'][node_id][year][day]['q'][p]
+                    shared_ess_vars['tso_dso'][node_id][year][day]['p'][p] += (preq_tso + preq_dso) * 0.50
+                    shared_ess_vars['tso_dso'][node_id][year][day]['q'][p] += (qreq_tso + qreq_dso) * 0.50
 
         # Update dual variables Shared ESS
         for year in planning_problem.years:
             for day in planning_problem.days:
                 for t in range(planning_problem.num_instants):
-                    error_p_ess_transm = shared_ess_vars['tso'][node_id][year][day]['p'][t] - shared_ess_vars['esso'][node_id][year][day]['p'][t]
-                    error_q_ess_transm = shared_ess_vars['tso'][node_id][year][day]['q'][t] - shared_ess_vars['esso'][node_id][year][day]['q'][t]
-                    error_p_ess_distr = shared_ess_vars['dso'][node_id][year][day]['p'][t] - shared_ess_vars['esso'][node_id][year][day]['p'][t]
-                    error_q_ess_distr = shared_ess_vars['dso'][node_id][year][day]['q'][t] - shared_ess_vars['esso'][node_id][year][day]['q'][t]
-                    dual_vars['tso'][node_id][year][day]['p'][t] += params.rho['ess']['esso'] * (error_p_ess_transm)
-                    dual_vars['tso'][node_id][year][day]['q'][t] += params.rho['ess']['esso'] * (error_q_ess_transm)
-                    dual_vars['dso'][node_id][year][day]['p'][t] += params.rho['ess']['esso'] * (error_p_ess_distr)
-                    dual_vars['dso'][node_id][year][day]['q'][t] += params.rho['ess']['esso'] * (error_q_ess_distr)
+                    error_preq = shared_ess_vars['tso_dso'][node_id][year][day]['p'][t] - shared_ess_vars['esso'][node_id][year][day]['p'][t]
+                    error_qreq = shared_ess_vars['tso_dso'][node_id][year][day]['q'][t] - shared_ess_vars['esso'][node_id][year][day]['q'][t]
+                    dual_vars['esso'][node_id][year][day]['p'][t] += params.rho['ess']['esso'] * (-error_preq)
+                    dual_vars['esso'][node_id][year][day]['q'][t] += params.rho['ess']['esso'] * (-error_qreq)
+                    dual_vars['tso_dso'][node_id][year][day]['p'][t] += rho_tso_dso * (error_preq)
+                    dual_vars['tso_dso'][node_id][year][day]['q'][t] += rho_tso_dso * (error_qreq)
 
 
 def compute_primal_value(planning_problem, tso_model, dso_models, esso_model):
