@@ -348,7 +348,6 @@ def create_admm_variables(planning_problem):
             consensus_variables['interface']['pf']['dso'][node_id][year] = dict()
             consensus_variables['ess']['tso'][node_id][year] = dict()
             consensus_variables['ess']['dso'][node_id][year] = dict()
-            consensus_variables['ess']['tso_dso'][node_id][year] = dict()
             consensus_variables['ess']['esso'][node_id][year] = dict()
 
             dual_variables['pf']['tso'][node_id][year] = dict()
