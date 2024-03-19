@@ -264,6 +264,9 @@ def _build_subproblem_model(shared_ess_data):
     if shared_ess_data.params.ess_relax_soc:
         model.es_penalty_soc_up = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
         model.es_penalty_soc_down = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+    if shared_ess_data.params.ess_relax_day_balance:
+        model.es_penalty_day_balance_up = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_day_balance_down = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, domain=pe.NonNegativeReals, initialize=0.00)
     for e in model.energy_storages:
         for y in model.years:
             model.es_e_capacity_degradation[e, y].setub(1.00)
@@ -444,8 +447,11 @@ def _build_subproblem_model(shared_ess_data):
                                 capacity_remaining += model.es_s_rated[e, y] - model.es_pch[e, y, d, s_m, s_o, t] - model.es_pdch[e, y, d, s_m, s_o, t]
                             model.secondary_reserve.add(pup_remaining + pdown_remaining <= capacity_remaining / 2.0)
 
-                        model.energy_storage_day_balance.add(model.es_soc[e, y, d, s_m, s_o, len(model.periods) - 1] - soc_final >= -SMALL_TOLERANCE)
-                        model.energy_storage_day_balance.add(model.es_soc[e, y, d, s_m, s_o, len(model.periods) - 1] - soc_final <= SMALL_TOLERANCE)
+                        if shared_ess_data.params.ess_relax_day_balance:
+                            model.energy_storage_day_balance.add(model.es_soc[e, y, d, s_m, s_o, len(model.periods) - 1] - soc_final == model.es_penalty_day_balance_up[e, y, d, s_m, s_o] - model.es_penalty_day_balance_down[e, y, d, s_m, s_o])
+                        else:
+                            model.energy_storage_day_balance.add(model.es_soc[e, y, d, s_m, s_o, len(model.periods) - 1] - soc_final >= -SMALL_TOLERANCE)
+                            model.energy_storage_day_balance.add(model.es_soc[e, y, d, s_m, s_o, len(model.periods) - 1] - soc_final <= SMALL_TOLERANCE)
 
             # Expected P and Q
             for d in model.days:
@@ -535,6 +541,9 @@ def _build_subproblem_model(shared_ess_data):
 
                             if shared_ess_data.params.ess_relax_soc:
                                 slack_penalty += PENALTY_ESS_SOC * (model.es_penalty_soc_up[e, y, d, s_m, s_o, p] + model.es_penalty_soc_down[e, y, d, s_m, s_o, p])
+
+                        if shared_ess_data.params.ess_relax_day_balance:
+                            slack_penalty += PENALTY_ESS_DAY_BALANCE * (model.es_penalty_day_balance_up[e, y, d, s_m, s_o] + model.es_penalty_day_balance_down[e, y, d, s_m, s_o])
 
             # Slack penalties
             slack_penalty += PENALTY_ESS_SLACK * (model.slack_s_up[e, y] + model.slack_s_down[e, y])
@@ -788,7 +797,12 @@ def _process_results(shared_ess_data, model):
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['slack_e_down'] = dict()
                         if shared_ess_data.params.ess_relax_comp:
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['comp'] = dict()
-
+                        if shared_ess_data.params.ess_relax_soc:
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_up'] = dict()
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_down'] = dict()
+                        if shared_ess_data.params.ess_relax_day_balance:
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'] = dict()
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_down'] = dict()
                     for e in model.energy_storages:
                         node_id = shared_ess_data.shared_energy_storages[year][e].bus
                         capacity_available = pe.value(model.es_e_capacity_available[e, y])
@@ -831,6 +845,21 @@ def _process_results(shared_ess_data, model):
                                 for p in model.periods:
                                     comp = pe.value(model.es_penalty_comp[e, y, d, s_m, s_o, p])
                                     processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['comp'][node_id].append(comp)
+
+                            if shared_ess_data.params.ess_relax_soc:
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_up'][node_id] = []
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_down'][node_id] = []
+                                for p in model.periods:
+                                    soc_up = pe.value(model.es_penalty_soc_up[e, y, d, s_m, s_o, p])
+                                    soc_down = pe.value(model.es_penalty_soc_down[e, y, d, s_m, s_o, p])
+                                    processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_up'][node_id].append(soc_up)
+                                    processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_down'][node_id].append(soc_down)
+
+                            if shared_ess_data.params.ess_relax_day_balance:
+                                balance_up = pe.value(model.es_penalty_day_balance_up[e, y, d, s_m, s_o])
+                                balance_down = pe.value(model.es_penalty_day_balance_up[e, y, d, s_m, s_o])
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'][node_id] = balance_up
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'][node_id] = balance_down
 
         processed_results['specs'][year] = dict()
         for e in model.energy_storages:
@@ -1229,7 +1258,6 @@ def _write_relaxation_slacks_results_to_excel(shared_ess_data, workbook, results
 
     row_idx = 1
     decimal_style = '0.00'
-    perc_style = '0.00%'
 
     # Write Header
     sheet.cell(row=row_idx, column=1).value = 'Node ID'
@@ -1297,13 +1325,66 @@ def _write_relaxation_slacks_results_to_excel(shared_ess_data, workbook, results
                         row_idx = row_idx + 1
 
                         # Slack, Comp
-                        sheet.cell(row=row_idx, column=1).value = node_id
-                        sheet.cell(row=row_idx, column=2).value = int(year)
-                        sheet.cell(row=row_idx, column=3).value = day
-                        sheet.cell(row=row_idx, column=4).value = 'comp'
-                        sheet.cell(row=row_idx, column=5).value = s_m
-                        sheet.cell(row=row_idx, column=6).value = s_o
-                        for p in range(shared_ess_data.num_instants):
-                            sheet.cell(row=row_idx, column=p + 7).value = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['comp'][node_id][p]
-                            sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
-                        row_idx = row_idx + 1
+                        if shared_ess_data.params.ess_relax_comp:
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'comp'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(shared_ess_data.num_instants):
+                                sheet.cell(row=row_idx, column=p + 7).value = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['comp'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                        if shared_ess_data.params.ess_relax_soc:
+
+                            # Slack, soc, up
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'soc_up'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(shared_ess_data.num_instants):
+                                sheet.cell(row=row_idx, column=p + 7).value = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # Slack, soc, down
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'soc_down'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(shared_ess_data.num_instants):
+                                sheet.cell(row=row_idx, column=p + 7).value = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                        if shared_ess_data.params.ess_relax_day_balance:
+
+                            # Slack, day balance, up
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'day_balance_up'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(shared_ess_data.num_instants):
+                                sheet.cell(row=row_idx, column=p + 7).value = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'][node_id]
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # Slack, day balance, down
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'day_balance_down'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(shared_ess_data.num_instants):
+                                sheet.cell(row=row_idx, column=p + 7).value = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'][node_id]
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
