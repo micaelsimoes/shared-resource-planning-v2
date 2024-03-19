@@ -267,6 +267,11 @@ def _build_subproblem_model(shared_ess_data):
     if shared_ess_data.params.ess_relax_day_balance:
         model.es_penalty_day_balance_up = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, domain=pe.NonNegativeReals, initialize=0.00)
         model.es_penalty_day_balance_down = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, domain=pe.NonNegativeReals, initialize=0.00)
+    if shared_ess_data.params.ess_relax_installed_capacity:
+        model.es_penalty_s_capacity_up = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_s_capacity_down = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_e_capacity_up = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_e_capacity_down = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.00)
     for e in model.energy_storages:
         for y in model.years:
             model.es_e_capacity_degradation[e, y].setub(1.00)
@@ -296,10 +301,14 @@ def _build_subproblem_model(shared_ess_data):
                 total_s_capacity_per_year[x] += model.es_s_investment[e, y]
                 total_e_capacity_per_year[x] += model.es_e_investment[e, y]
         for y in model.years:
-            model.rated_s_capacity.add(model.es_s_rated[e, y] - total_s_capacity_per_year[y] >= -SMALL_TOLERANCE)
-            model.rated_s_capacity.add(model.es_s_rated[e, y] - total_s_capacity_per_year[y] <= SMALL_TOLERANCE)
-            model.rated_e_capacity.add(model.es_e_rated[e, y] - total_e_capacity_per_year[y] >= -SMALL_TOLERANCE)
-            model.rated_e_capacity.add(model.es_e_rated[e, y] - total_e_capacity_per_year[y] <= SMALL_TOLERANCE)
+            if shared_ess_data.params.ess_relax_installed_capacity:
+                model.rated_s_capacity.add(model.es_s_rated[e, y] - total_s_capacity_per_year[y] == model.es_penalty_s_capacity_up[e, y] - model.es_penalty_s_capacity_down[e, y])
+                model.rated_s_capacity.add(model.es_e_rated[e, y] - total_e_capacity_per_year[y] == model.es_penalty_e_capacity_up[e, y] - model.es_penalty_e_capacity_down[e, y])
+            else:
+                model.rated_s_capacity.add(model.es_s_rated[e, y] - total_s_capacity_per_year[y] >= -SMALL_TOLERANCE)
+                model.rated_s_capacity.add(model.es_s_rated[e, y] - total_s_capacity_per_year[y] <= SMALL_TOLERANCE)
+                model.rated_e_capacity.add(model.es_e_rated[e, y] - total_e_capacity_per_year[y] >= -SMALL_TOLERANCE)
+                model.rated_e_capacity.add(model.es_e_rated[e, y] - total_e_capacity_per_year[y] <= SMALL_TOLERANCE)
 
     # - Energy capacities available in year y (as a function of degradation)
     model.energy_storage_available_e_capacity = pe.ConstraintList()
@@ -548,6 +557,10 @@ def _build_subproblem_model(shared_ess_data):
             # Slack penalties
             slack_penalty += PENALTY_ESS_SLACK * (model.slack_s_up[e, y] + model.slack_s_down[e, y])
             slack_penalty += PENALTY_ESS_SLACK * (model.slack_e_up[e, y] + model.slack_e_down[e, y])
+
+            # Rated capacity penalties
+            slack_penalty += PENALTY_ESS_CAPACITY * (model.es_penalty_s_capacity_up[e, y] + model.es_penalty_s_capacity_down[e, y])
+            slack_penalty += PENALTY_ESS_CAPACITY * (model.es_penalty_e_capacity_up[e, y] + model.es_penalty_e_capacity_down[e, y])
 
     obj = operational_cost + slack_penalty
     model.objective = pe.Objective(sense=pe.minimize, expr=obj)
