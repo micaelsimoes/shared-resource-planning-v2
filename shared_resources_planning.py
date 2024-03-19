@@ -4423,29 +4423,6 @@ def _write_relaxation_slacks_yoy_results_esso_to_excel(planning_problem, workboo
     sheet.cell(row=row_idx, column=5).value = 'Value'
     row_idx = row_idx + 1
 
-    if planning_problem.shared_ess_data.params.ess_relax_capacity_relative:
-        for node_id in planning_problem.active_distribution_network_nodes:
-            for from_year in years:
-                for to_year in years:
-
-                    erel_up = results[from_year][days[0]]['scenarios'][0][0]['relaxation_slacks']['relative_capacity_up'][node_id][to_year]
-                    sheet.cell(row=row_idx, column=1).value = node_id
-                    sheet.cell(row=row_idx, column=2).value = int(from_year)
-                    sheet.cell(row=row_idx, column=3).value = int(to_year)
-                    sheet.cell(row=row_idx, column=4).value = 'Erel, up'
-                    sheet.cell(row=row_idx, column=5).value = erel_up
-                    sheet.cell(row=row_idx, column=5).number_format = decimal_style
-                    row_idx = row_idx + 1
-
-                    erel_down = results[from_year][days[0]]['scenarios'][0][0]['relaxation_slacks']['relative_capacity_down'][node_id][to_year]
-                    sheet.cell(row=row_idx, column=1).value = node_id
-                    sheet.cell(row=row_idx, column=2).value = int(from_year)
-                    sheet.cell(row=row_idx, column=3).value = int(to_year)
-                    sheet.cell(row=row_idx, column=4).value = 'Erel, down'
-                    sheet.cell(row=row_idx, column=5).value = erel_down
-                    sheet.cell(row=row_idx, column=5).number_format = decimal_style
-                    row_idx = row_idx + 1
-
 
 # ======================================================================================================================
 #   Aux functions
