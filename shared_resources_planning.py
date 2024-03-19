@@ -208,11 +208,9 @@ def _run_operational_planning(planning_problem, candidate_solution, debug_flag=F
                     print(f"\t\tDay {day}")
                     print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
                     print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
-                    print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
                     print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
                     print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
                     print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
-                    print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
                     print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -245,11 +243,9 @@ def _run_operational_planning(planning_problem, candidate_solution, debug_flag=F
                         print(f"\t\tDay {day}")
                         print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
                         print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
-                        print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
                         print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
                         print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
                         print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
-                        print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
                         print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
 
         # 2.2 Update primal evolution
@@ -282,11 +278,9 @@ def _run_operational_planning(planning_problem, candidate_solution, debug_flag=F
                         print(f"\t\tDay {day}")
                         print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
                         print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
-                        print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
                         print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
                         print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
                         print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
-                        print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
                         print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
 
         # 3.2 Update primal evolution
@@ -316,11 +310,9 @@ def _run_operational_planning(planning_problem, candidate_solution, debug_flag=F
                         print(f"\t\tDay {day}")
                         print(f"\t\t\tTSO,     P = {consensus_vars['ess']['tso'][node_id][year][day]['p']}")
                         print(f"\t\t\tDSO,     P = {consensus_vars['ess']['dso'][node_id][year][day]['p']}")
-                        print(f"\t\t\tTSO_DSO, P = {consensus_vars['ess']['tso_dso'][node_id][year][day]['p']}")
                         print(f"\t\t\tESSO,    P = {consensus_vars['ess']['esso'][node_id][year][day]['p']}")
                         print(f"\t\t\tTSO,     Q = {consensus_vars['ess']['tso'][node_id][year][day]['q']}")
                         print(f"\t\t\tDSO,     Q = {consensus_vars['ess']['dso'][node_id][year][day]['q']}")
-                        print(f"\t\t\tTSO_DSO, Q = {consensus_vars['ess']['tso_dso'][node_id][year][day]['q']}")
                         print(f"\t\t\tESSO,    Q = {consensus_vars['ess']['esso'][node_id][year][day]['q']}")
 
         # 4.2 Update primal evolution
