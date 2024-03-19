@@ -1870,14 +1870,10 @@ def _write_shared_energy_storages_results_to_excel(planning_problem, workbook, r
         for day in results['tso']['results'][year]:
 
             expected_p = dict()
-            expected_q = dict()
-            expected_s = dict()
             expected_soc = dict()
             expected_soc_percent = dict()
             for node_id in planning_problem.active_distribution_network_nodes:
                 expected_p[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
-                expected_q[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
-                expected_s[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
                 expected_soc[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
                 expected_soc_percent[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
 
@@ -1908,42 +1904,6 @@ def _write_shared_energy_storages_results_to_excel(planning_problem, workbook, r
                                 expected_p[node_id][p] += ess_p * omega_m * omega_s
                             else:
                                 expected_p[node_id][p] = ess_p
-
-                        # Reactive power
-                        row_idx = row_idx + 1
-                        sheet.cell(row=row_idx, column=1).value = node_id
-                        sheet.cell(row=row_idx, column=2).value = 'TSO'
-                        sheet.cell(row=row_idx, column=3).value = int(year)
-                        sheet.cell(row=row_idx, column=4).value = day
-                        sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
-                        sheet.cell(row=row_idx, column=6).value = s_m
-                        sheet.cell(row=row_idx, column=7).value = s_o
-                        for p in range(planning_problem.num_instants):
-                            ess_q = results['tso']['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['q'][node_id][p]
-                            sheet.cell(row=row_idx, column=p + 8).value = ess_q
-                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-                            if ess_q != 'N/A':
-                                expected_q[node_id][p] += ess_q * omega_m * omega_s
-                            else:
-                                expected_q[node_id][p] = ess_q
-
-                        # Apparent power
-                        row_idx = row_idx + 1
-                        sheet.cell(row=row_idx, column=1).value = node_id
-                        sheet.cell(row=row_idx, column=2).value = 'TSO'
-                        sheet.cell(row=row_idx, column=3).value = int(year)
-                        sheet.cell(row=row_idx, column=4).value = day
-                        sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
-                        sheet.cell(row=row_idx, column=6).value = s_m
-                        sheet.cell(row=row_idx, column=7).value = s_o
-                        for p in range(planning_problem.num_instants):
-                            ess_s = results['tso']['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['s'][node_id][p]
-                            sheet.cell(row=row_idx, column=p + 8).value = ess_s
-                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-                            if ess_s != 'N/A':
-                                expected_s[node_id][p] += ess_s * omega_m * omega_s
-                            else:
-                                expected_s[node_id][p] = ess_s
 
                         # State-of-Charge, [MVAh]
                         row_idx = row_idx + 1
@@ -1996,32 +1956,6 @@ def _write_shared_energy_storages_results_to_excel(planning_problem, workbook, r
                     sheet.cell(row=row_idx, column=p + 8).value = expected_p[node_id][p]
                     sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
 
-                # Reactive Power, [MVAr]
-                row_idx = row_idx + 1
-                sheet.cell(row=row_idx, column=1).value = node_id
-                sheet.cell(row=row_idx, column=2).value = 'TSO'
-                sheet.cell(row=row_idx, column=3).value = int(year)
-                sheet.cell(row=row_idx, column=4).value = day
-                sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
-                sheet.cell(row=row_idx, column=6).value = 'Expected'
-                sheet.cell(row=row_idx, column=7).value = '-'
-                for p in range(planning_problem.num_instants):
-                    sheet.cell(row=row_idx, column=p + 8).value = expected_q[node_id][p]
-                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-
-                # Apparent Power, [MVA]
-                row_idx = row_idx + 1
-                sheet.cell(row=row_idx, column=1).value = node_id
-                sheet.cell(row=row_idx, column=2).value = 'TSO'
-                sheet.cell(row=row_idx, column=3).value = int(year)
-                sheet.cell(row=row_idx, column=4).value = day
-                sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
-                sheet.cell(row=row_idx, column=6).value = 'Expected'
-                sheet.cell(row=row_idx, column=7).value = '-'
-                for p in range(planning_problem.num_instants):
-                    sheet.cell(row=row_idx, column=p + 8).value = expected_s[node_id][p]
-                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-
                 # State-of-Charge, [MVAh]
                 row_idx = row_idx + 1
                 sheet.cell(row=row_idx, column=1).value = node_id
@@ -2057,8 +1991,6 @@ def _write_shared_energy_storages_results_to_excel(planning_problem, workbook, r
                 ref_node_id = distribution_network.get_reference_node_id()
 
                 expected_p = [0.0 for _ in range(planning_problem.num_instants)]
-                expected_q = [0.0 for _ in range(planning_problem.num_instants)]
-                expected_s = [0.0 for _ in range(planning_problem.num_instants)]
                 expected_soc = [0.0 for _ in range(planning_problem.num_instants)]
                 expected_soc_percent = [0.0 for _ in range(planning_problem.num_instants)]
 
@@ -2087,42 +2019,6 @@ def _write_shared_energy_storages_results_to_excel(planning_problem, workbook, r
                                 expected_p[p] += ess_p * omega_m * omega_s
                             else:
                                 expected_p[p] = ess_p
-
-                        # Reactive power
-                        row_idx = row_idx + 1
-                        sheet.cell(row=row_idx, column=1).value = node_id
-                        sheet.cell(row=row_idx, column=2).value = 'DSO'
-                        sheet.cell(row=row_idx, column=3).value = int(year)
-                        sheet.cell(row=row_idx, column=4).value = day
-                        sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
-                        sheet.cell(row=row_idx, column=6).value = s_m
-                        sheet.cell(row=row_idx, column=7).value = s_o
-                        for p in range(planning_problem.num_instants):
-                            ess_q = results['dso'][node_id]['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['q'][ref_node_id][p]
-                            sheet.cell(row=row_idx, column=p + 8).value = ess_q
-                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-                            if ess_q != 'N/A':
-                                expected_q[p] += ess_q * omega_m * omega_s
-                            else:
-                                expected_q[p] = ess_q
-
-                        # Apparent power
-                        row_idx = row_idx + 1
-                        sheet.cell(row=row_idx, column=1).value = node_id
-                        sheet.cell(row=row_idx, column=2).value = 'DSO'
-                        sheet.cell(row=row_idx, column=3).value = int(year)
-                        sheet.cell(row=row_idx, column=4).value = day
-                        sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
-                        sheet.cell(row=row_idx, column=6).value = s_m
-                        sheet.cell(row=row_idx, column=7).value = s_o
-                        for p in range(planning_problem.num_instants):
-                            ess_s = results['dso'][node_id]['results'][year][day]['scenarios'][s_m][s_o]['shared_energy_storages']['s'][ref_node_id][p]
-                            sheet.cell(row=row_idx, column=p + 8).value = ess_s
-                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-                            if ess_s != 'N/A':
-                                expected_s[p] += ess_s * omega_m * omega_s
-                            else:
-                                expected_s[p] = ess_s
 
                         # State-of-Charge, [MVAh]
                         row_idx = row_idx + 1
@@ -2175,32 +2071,6 @@ def _write_shared_energy_storages_results_to_excel(planning_problem, workbook, r
                     sheet.cell(row=row_idx, column=p + 8).value = expected_p[p]
                     sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
 
-                # Reactive Power, [MVAr]
-                row_idx = row_idx + 1
-                sheet.cell(row=row_idx, column=1).value = node_id
-                sheet.cell(row=row_idx, column=2).value = 'DSO'
-                sheet.cell(row=row_idx, column=3).value = int(year)
-                sheet.cell(row=row_idx, column=4).value = day
-                sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
-                sheet.cell(row=row_idx, column=6).value = 'Expected'
-                sheet.cell(row=row_idx, column=7).value = '-'
-                for p in range(planning_problem.num_instants):
-                    sheet.cell(row=row_idx, column=p + 8).value = expected_q[p]
-                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-
-                # Apparent Power, [MVA]
-                row_idx = row_idx + 1
-                sheet.cell(row=row_idx, column=1).value = node_id
-                sheet.cell(row=row_idx, column=2).value = 'DSO'
-                sheet.cell(row=row_idx, column=3).value = int(year)
-                sheet.cell(row=row_idx, column=4).value = day
-                sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
-                sheet.cell(row=row_idx, column=6).value = 'Expected'
-                sheet.cell(row=row_idx, column=7).value = '-'
-                for p in range(planning_problem.num_instants):
-                    sheet.cell(row=row_idx, column=p + 8).value = expected_s[p]
-                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-
                 # State-of-Charge, [MVAh]
                 row_idx = row_idx + 1
                 sheet.cell(row=row_idx, column=1).value = node_id
@@ -2232,16 +2102,12 @@ def _write_shared_energy_storages_results_to_excel(planning_problem, workbook, r
         for day in results['esso']['results'][year]:
 
             expected_p = dict()
-            expected_q = dict()
-            expected_s = dict()
             expected_pup = dict()
             expected_pdown = dict()
             expected_soc = dict()
             expected_soc_percent = dict()
             for node_id in planning_problem.active_distribution_network_nodes:
                 expected_p[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
-                expected_q[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
-                expected_s[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
                 expected_pup[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
                 expected_pdown[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
                 expected_soc[node_id] = [0.0 for _ in range(planning_problem.num_instants)]
@@ -2274,42 +2140,6 @@ def _write_shared_energy_storages_results_to_excel(planning_problem, workbook, r
                                 expected_p[node_id][p] += ess_p * omega_m * omega_s
                             else:
                                 expected_p[node_id][p] = ess_p
-
-                        # Reactive power
-                        row_idx = row_idx + 1
-                        sheet.cell(row=row_idx, column=1).value = node_id
-                        sheet.cell(row=row_idx, column=2).value = 'ESSO'
-                        sheet.cell(row=row_idx, column=3).value = int(year)
-                        sheet.cell(row=row_idx, column=4).value = day
-                        sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
-                        sheet.cell(row=row_idx, column=6).value = s_m
-                        sheet.cell(row=row_idx, column=7).value = s_o
-                        for p in range(planning_problem.num_instants):
-                            ess_q = results['esso']['results'][year][day]['scenarios'][s_m][s_o]['q'][node_id][p]
-                            sheet.cell(row=row_idx, column=p + 8).value = ess_q
-                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-                            if ess_q != 'N/A':
-                                expected_q[node_id][p] += ess_q * omega_m * omega_s
-                            else:
-                                expected_q[node_id][p] = ess_q
-
-                        # Apparent power
-                        row_idx = row_idx + 1
-                        sheet.cell(row=row_idx, column=1).value = node_id
-                        sheet.cell(row=row_idx, column=2).value = 'ESSO'
-                        sheet.cell(row=row_idx, column=3).value = int(year)
-                        sheet.cell(row=row_idx, column=4).value = day
-                        sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
-                        sheet.cell(row=row_idx, column=6).value = s_m
-                        sheet.cell(row=row_idx, column=7).value = s_o
-                        for p in range(planning_problem.num_instants):
-                            ess_s = results['esso']['results'][year][day]['scenarios'][s_m][s_o]['s'][node_id][p]
-                            sheet.cell(row=row_idx, column=p + 8).value = ess_s
-                            sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-                            if ess_s != 'N/A':
-                                expected_s[node_id][p] += ess_s * omega_m * omega_s
-                            else:
-                                expected_s[node_id][p] = ess_s
 
                         # Upward reserve
                         row_idx = row_idx + 1
@@ -2396,32 +2226,6 @@ def _write_shared_energy_storages_results_to_excel(planning_problem, workbook, r
                 sheet.cell(row=row_idx, column=7).value = '-'
                 for p in range(planning_problem.num_instants):
                     sheet.cell(row=row_idx, column=p + 8).value = expected_p[node_id][p]
-                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-
-                # Reactive Power, [MVAr]
-                row_idx = row_idx + 1
-                sheet.cell(row=row_idx, column=1).value = node_id
-                sheet.cell(row=row_idx, column=2).value = 'ESSO'
-                sheet.cell(row=row_idx, column=3).value = int(year)
-                sheet.cell(row=row_idx, column=4).value = day
-                sheet.cell(row=row_idx, column=5).value = 'Q, [MVAr]'
-                sheet.cell(row=row_idx, column=6).value = 'Expected'
-                sheet.cell(row=row_idx, column=7).value = '-'
-                for p in range(planning_problem.num_instants):
-                    sheet.cell(row=row_idx, column=p + 8).value = expected_q[node_id][p]
-                    sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
-
-                # Apparent Power, [MVA]
-                row_idx = row_idx + 1
-                sheet.cell(row=row_idx, column=1).value = node_id
-                sheet.cell(row=row_idx, column=2).value = 'ESSO'
-                sheet.cell(row=row_idx, column=3).value = int(year)
-                sheet.cell(row=row_idx, column=4).value = day
-                sheet.cell(row=row_idx, column=5).value = 'S, [MVA]'
-                sheet.cell(row=row_idx, column=6).value = 'Expected'
-                sheet.cell(row=row_idx, column=7).value = '-'
-                for p in range(planning_problem.num_instants):
-                    sheet.cell(row=row_idx, column=p + 8).value = expected_s[node_id][p]
                     sheet.cell(row=row_idx, column=p + 8).number_format = decimal_style
 
                 # State-of-Charge, [MVAh]
