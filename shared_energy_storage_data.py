@@ -870,9 +870,9 @@ def _process_results(shared_ess_data, model):
 
                             if shared_ess_data.params.ess_relax_day_balance:
                                 balance_up = pe.value(model.es_penalty_day_balance_up[e, y, d, s_m, s_o])
-                                balance_down = pe.value(model.es_penalty_day_balance_up[e, y, d, s_m, s_o])
+                                balance_down = pe.value(model.es_penalty_day_balance_down[e, y, d, s_m, s_o])
                                 processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'][node_id] = balance_up
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'][node_id] = balance_down
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_down'][node_id] = balance_down
 
         processed_results['specs'][year] = dict()
         for e in model.energy_storages:
