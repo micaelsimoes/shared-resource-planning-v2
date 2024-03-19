@@ -737,7 +737,8 @@ def _process_results(shared_ess_data, model):
 
     processed_results = {
         'of_value': shared_ess_data.compute_primal_value(model),
-        'results': dict()
+        'results': dict(),
+        'specs': dict()
     }
 
     repr_days = [day for day in shared_ess_data.days]
@@ -747,7 +748,6 @@ def _process_results(shared_ess_data, model):
 
         year = repr_years[y]
         processed_results['results'][year] = dict()
-
         for d in model.days:
 
             day = repr_days[d]
@@ -818,6 +818,13 @@ def _process_results(shared_ess_data, model):
                                     comp = pe.value(model.es_penalty_comp[e, y, d, s_m, s_o, p])
                                     processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['comp'][node_id].append(comp)
 
+        processed_results['specs'][year] = dict()
+        for e in model.energy_storages:
+            node_id = shared_ess_data.shared_energy_storages[year][e].bus
+            processed_results['specs'][year][node_id] = dict()
+            processed_results['specs'][year][node_id]['s_rated'] = pe.value(model.es_s_rated[e, y])
+            processed_results['specs'][year][node_id]['e_rated'] = pe.value(model.es_e_rated[e, y])
+
     return processed_results
 
 
@@ -863,6 +870,7 @@ def _write_optimization_results_to_excel(shared_ess_data, data_dir, results):
     wb = Workbook()
 
     _write_main_info_to_excel(shared_ess_data, wb, results)
+    _write_shared_ess_specifications(shared_ess_data, wb, results['specs'])
     _write_market_cost_values_to_excel(shared_ess_data, wb)
     _write_shared_network_energy_storage_results_to_excel(shared_ess_data, wb, results['results'])
 
@@ -914,6 +922,31 @@ def _write_main_info_to_excel(shared_ess_data, workbook, results):
             col_idx += 1
     sheet.cell(row=line_idx, column=col_idx).value = total_of
     sheet.cell(row=line_idx, column=col_idx).number_format = decimal_style
+
+
+def _write_shared_ess_specifications(shared_ess_info, workbook, results):
+
+    sheet = workbook.create_sheet('Shared ESS Specifications')
+
+    decimal_style = '0.000'
+
+    # Write Header
+    row_idx = 1
+    sheet.cell(row=row_idx, column=1).value = 'Year'
+    sheet.cell(row=row_idx, column=2).value = 'Node ID'
+    sheet.cell(row=row_idx, column=3).value = 'Sinst, [MVA]'
+    sheet.cell(row=row_idx, column=4).value = 'Einst, [MVAh]'
+
+    # Write Shared ESS specifications
+    for year in results:
+        for node_id in results[year]:
+            row_idx = row_idx + 1
+            sheet.cell(row=row_idx, column=1).value = year
+            sheet.cell(row=row_idx, column=2).value = node_id
+            sheet.cell(row=row_idx, column=3).value = results[year][node_id]['s_rated']
+            sheet.cell(row=row_idx, column=3).number_format = decimal_style
+            sheet.cell(row=row_idx, column=4).value = results[year][node_id]['e_rated']
+            sheet.cell(row=row_idx, column=4).number_format = decimal_style
 
 
 def _write_market_cost_values_to_excel(shared_ess_data, workbook):
