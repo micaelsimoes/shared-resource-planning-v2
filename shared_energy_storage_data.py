@@ -428,7 +428,6 @@ def _build_subproblem_model(shared_ess_data):
                             model.energy_storage_limits.add(model.es_qdch[e, y, d, s_m, s_o, p] >= tan(min_phi) * model.es_pdch[e, y, d, s_m, s_o, p])
                             model.energy_storage_limits.add(model.es_pup[e, y, d, s_m, s_o, p] <= model.es_s_rated[e, y])
                             model.energy_storage_limits.add(model.es_pdown[e, y, d, s_m, s_o, p] <= model.es_s_rated[e, y])
-
                             model.energy_storage_limits.add(model.es_soc[e, y, d, s_m, s_o, p] >= model.es_e_capacity_available[e, y] * ENERGY_STORAGE_MIN_ENERGY_STORED)
                             model.energy_storage_limits.add(model.es_soc[e, y, d, s_m, s_o, p] <= model.es_e_capacity_available[e, y] * ENERGY_STORAGE_MAX_ENERGY_STORED)
 
@@ -496,10 +495,9 @@ def _build_subproblem_model(shared_ess_data):
 
                             # Charging/discharging complementarity constraint
                             if shared_ess_data.params.ess_relax_comp:
-                                model.energy_storage_ch_dch_exclusion.add(sch * sdch == model.es_penalty_comp[e, y, d, s_m, s_o, p])
+                                model.energy_storage_ch_dch_exclusion.add(sch * sdch <= model.es_penalty_comp[e, y, d, s_m, s_o, p])
                             else:
                                 # NLP formulation
-                                # model.energy_storage_ch_dch_exclusion.add(pch * pdch == 0.00)
                                 model.energy_storage_ch_dch_exclusion.add(sch * sdch >= -SMALL_TOLERANCE)
                                 model.energy_storage_ch_dch_exclusion.add(sch * sdch <= SMALL_TOLERANCE)
 
