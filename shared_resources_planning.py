@@ -4327,7 +4327,7 @@ def _write_relaxation_slacks_results_esso_to_excel(planning_problem, workbook, r
             sheet.cell(row=row_idx, column=1).value = node_id
             sheet.cell(row=row_idx, column=2).value = int(year)
             sheet.cell(row=row_idx, column=3).value = 'N/A'
-            sheet.cell(row=row_idx, column=4).value = 'capacity_available_up'
+            sheet.cell(row=row_idx, column=4).value = 'Capacity available, up'
             sheet.cell(row=row_idx, column=5).value = 'N/A'
             sheet.cell(row=row_idx, column=6).value = 'N/A'
             for p in range(planning_problem.num_instants):
@@ -4339,7 +4339,7 @@ def _write_relaxation_slacks_results_esso_to_excel(planning_problem, workbook, r
             sheet.cell(row=row_idx, column=1).value = node_id
             sheet.cell(row=row_idx, column=2).value = int(year)
             sheet.cell(row=row_idx, column=3).value = 'N/A'
-            sheet.cell(row=row_idx, column=4).value = 'capacity_available_down'
+            sheet.cell(row=row_idx, column=4).value = 'Capacity available, down'
             sheet.cell(row=row_idx, column=5).value = 'N/A'
             sheet.cell(row=row_idx, column=6).value = 'N/A'
             for p in range(planning_problem.num_instants):
