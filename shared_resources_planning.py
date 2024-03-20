@@ -3640,8 +3640,9 @@ def _write_network_energy_storages_results_per_operator(network, sheet, operator
 
 def _write_relaxation_slacks_results_to_excel(planning_problem, workbook, results):
     _write_relaxation_slacks_results_network_operators_to_excel(planning_problem, workbook, results)
-    _write_relaxation_slacks_results_esso_to_excel(planning_problem, workbook, results['esso']['results'])
-    _write_relaxation_slacks_yoy_results_esso_to_excel(planning_problem, workbook, results['esso']['results'])
+    if planning_problem.shared_ess_data.params.slacks_used:
+        _write_relaxation_slacks_results_esso_to_excel(planning_problem, workbook, results['esso']['results'])
+        _write_relaxation_slacks_yoy_results_esso_to_excel(planning_problem, workbook, results['esso']['results'])
 
 
 def _write_relaxation_slacks_results_network_operators_to_excel(planning_problem, workbook, results):
