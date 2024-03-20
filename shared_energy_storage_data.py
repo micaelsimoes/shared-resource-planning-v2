@@ -270,6 +270,9 @@ def _build_subproblem_model(shared_ess_data):
     if shared_ess_data.params.ess_relax_capacity_available:
         model.es_penalty_capacity_available_up = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.00)
         model.es_penalty_capacity_available_down = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.00)
+    if shared_ess_data.params.ess_interface_relax:
+        model.es_penalty_expected_p_up = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_expected_p_down = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
 
     for e in model.energy_storages:
         for y in model.years:
@@ -469,8 +472,11 @@ def _build_subproblem_model(shared_ess_data):
                         for s_o in model.scenarios_operation:
                             prob_oper_scn = shared_ess_data.prob_operation_scenarios[s_o]
                             expected_p += (model.es_pch[e, y, d, s_m, s_o, p] - model.es_pdch[e, y, d, s_m, s_o, p]) * prob_market_scn * prob_oper_scn
-                    model.energy_storage_expected_power.add(model.es_expected_p[e, y, d, p] - expected_p >= -SMALL_TOLERANCE)
-                    model.energy_storage_expected_power.add(model.es_expected_p[e, y, d, p] - expected_p <= SMALL_TOLERANCE)
+                    if shared_ess_data.params.ess_interface_relax:
+                        model.energy_storage_expected_power.add(model.es_expected_p[e, y, d, p] - expected_p == model.es_penalty_expected_p_up[e, y, d, p] - model.es_penalty_expected_p_down[e, y, d, p])
+                    else:
+                        model.energy_storage_expected_power.add(model.es_expected_p[e, y, d, p] - expected_p >= -SMALL_TOLERANCE)
+                        model.energy_storage_expected_power.add(model.es_expected_p[e, y, d, p] - expected_p <= SMALL_TOLERANCE)
 
     # - Secondary Reserve
     for y in model.years:
@@ -551,6 +557,8 @@ def _build_subproblem_model(shared_ess_data):
 
                         if shared_ess_data.params.ess_relax_day_balance:
                             slack_penalty += PENALTY_ESS_DAY_BALANCE * (model.es_penalty_day_balance_up[e, y, d, s_m, s_o] + model.es_penalty_day_balance_down[e, y, d, s_m, s_o])
+                for p in model.periods:
+                    slack_penalty += PENALTY_INTERFACE_ESS * (model.es_penalty_expected_p_up[e, y, d, p] + model.es_penalty_expected_p_down[e, y, d, p])
 
             # Slack penalties
             slack_penalty += PENALTY_ESS_SLACK * (model.slack_s_up[e, y] + model.slack_s_down[e, y])
