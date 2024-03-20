@@ -850,6 +850,9 @@ def _process_results(shared_ess_data, model):
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['s_rated_down'] = dict()
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['e_rated_up'] = dict()
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['e_rated_down'] = dict()
+                    if shared_ess_data.params.ess_relax_capacity_degradation:
+                        processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_up'] = dict()
+                        processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_down'] = dict()
 
                     for e in model.energy_storages:
                         node_id = shared_ess_data.shared_energy_storages[year][e].bus
@@ -919,6 +922,10 @@ def _process_results(shared_ess_data, model):
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['s_rated_down'][node_id] = pe.value(model.es_penalty_s_rated_down[e, y])
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['e_rated_up'][node_id] = pe.value(model.es_penalty_e_rated_up[e, y])
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['e_rated_down'][node_id] = pe.value(model.es_penalty_e_rated_down[e, y])
+
+                        if shared_ess_data.params.ess_relax_capacity_degradation:
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_up'][node_id] = pe.value(model.es_penalty_e_capacity_degradation_up[e, y])
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_down'][node_id] = pe.value(model.es_penalty_e_capacity_degradation_down[e, y])
 
     return processed_results
 
@@ -1708,4 +1715,29 @@ def _write_relaxation_slacks_results_to_excel(shared_ess_data, workbook, results
                                 sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
                             row_idx = row_idx + 1
 
+                        # Capacity degradation
+                        if shared_ess_data.params.ess_relax_capacity_degradation:
 
+                            # Slack, capacity available, up
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'capacity_degradation_up'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(shared_ess_data.num_instants):
+                                sheet.cell(row=row_idx, column=p + 7).value = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_up'][node_id]
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # Slack, capacity available, down
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'capacity_degradation_down'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(shared_ess_data.num_instants):
+                                sheet.cell(row=row_idx, column=p + 7).value = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_down'][node_id]
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
