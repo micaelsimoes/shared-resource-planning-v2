@@ -813,6 +813,10 @@ def _process_results(shared_ess_data, model):
                         if shared_ess_data.params.ess_relax_day_balance:
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'] = dict()
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_down'] = dict()
+                        if shared_ess_data.params.ess_relax_capacity_available:
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_available_up'] = dict()
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_available_down'] = dict()
+
                     for e in model.energy_storages:
                         node_id = shared_ess_data.shared_energy_storages[year][e].bus
                         capacity_available = pe.value(model.es_e_capacity_available[e, y])
@@ -870,6 +874,12 @@ def _process_results(shared_ess_data, model):
                                 balance_down = pe.value(model.es_penalty_day_balance_down[e, y, d, s_m, s_o])
                                 processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'][node_id] = balance_up
                                 processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_down'][node_id] = balance_down
+
+                            if shared_ess_data.params.ess_relax_capacity_available:
+                                capacity_available_up = pe.value(model.es_penalty_capacity_available_up[e, y])
+                                capacity_available_down = pe.value(model.es_penalty_capacity_available_down[e, y])
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_available_up'][node_id] = capacity_available_up
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_available_down'][node_id] = capacity_available_down
 
         processed_results['specs'][year] = dict()
         for e in model.energy_storages:

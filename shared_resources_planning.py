@@ -4323,6 +4323,30 @@ def _write_relaxation_slacks_results_esso_to_excel(planning_problem, workbook, r
                 sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
             row_idx = row_idx + 1
 
+            capacity_available_up = results[year][days[0]]['scenarios'][0][0]['relaxation_slacks']['capacity_available_up'][node_id]
+            sheet.cell(row=row_idx, column=1).value = node_id
+            sheet.cell(row=row_idx, column=2).value = int(year)
+            sheet.cell(row=row_idx, column=3).value = 'N/A'
+            sheet.cell(row=row_idx, column=4).value = 'capacity_available_up'
+            sheet.cell(row=row_idx, column=5).value = 'N/A'
+            sheet.cell(row=row_idx, column=6).value = 'N/A'
+            for p in range(planning_problem.num_instants):
+                sheet.cell(row=row_idx, column=p + 7).value = capacity_available_up
+                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+            row_idx = row_idx + 1
+
+            capacity_available_down = results[year][days[0]]['scenarios'][0][0]['relaxation_slacks']['capacity_available_down'][node_id]
+            sheet.cell(row=row_idx, column=1).value = node_id
+            sheet.cell(row=row_idx, column=2).value = int(year)
+            sheet.cell(row=row_idx, column=3).value = 'N/A'
+            sheet.cell(row=row_idx, column=4).value = 'capacity_available_down'
+            sheet.cell(row=row_idx, column=5).value = 'N/A'
+            sheet.cell(row=row_idx, column=6).value = 'N/A'
+            for p in range(planning_problem.num_instants):
+                sheet.cell(row=row_idx, column=p + 7).value = capacity_available_down
+                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+            row_idx = row_idx + 1
+
     for year in results:
         for day in results[year]:
             for s_m in results[year][day]['scenarios']:
@@ -4381,9 +4405,7 @@ def _write_relaxation_slacks_results_esso_to_excel(planning_problem, workbook, r
                         sheet.cell(row=row_idx, column=5).value = s_m
                         sheet.cell(row=row_idx, column=6).value = s_o
                         for p in range(planning_problem.num_instants):
-                            balance_up = 0.00
-                            if p == planning_problem.num_instants - 1:
-                                balance_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'][node_id]
+                            balance_up = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'][node_id]
                             sheet.cell(row=row_idx, column=p + 7).value = balance_up
                             sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
                         row_idx = row_idx + 1
@@ -4395,9 +4417,7 @@ def _write_relaxation_slacks_results_esso_to_excel(planning_problem, workbook, r
                         sheet.cell(row=row_idx, column=5).value = s_m
                         sheet.cell(row=row_idx, column=6).value = s_o
                         for p in range(planning_problem.num_instants):
-                            balance_down = 0.00
-                            if p == planning_problem.num_instants - 1:
-                                balance_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_down'][node_id]
+                            balance_down = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_down'][node_id]
                             sheet.cell(row=row_idx, column=p + 7).value = balance_down
                             sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
                         row_idx = row_idx + 1
