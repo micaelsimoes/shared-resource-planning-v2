@@ -487,7 +487,7 @@ def create_distribution_networks_models(distribution_networks, interface_vars, s
 
         # Build model, fix candidate solution, and Run S-MPOPF model
         dso_model = distribution_network.build_model()
-        distribution_network.update_data_with_candidate_solution(candidate_solution['total_capacity'])
+        distribution_network.update_data_with_candidate_solution(candidate_solution)
         distribution_network.update_model_with_candidate_solution(dso_model, candidate_solution)
         distribution_network.optimize(dso_model)
 
