@@ -430,6 +430,7 @@ def create_transmission_network_model(transmission_network, interface_v_vars, in
 
     # Build model, fix candidate solution, and Run S-MPOPF model
     tso_model = transmission_network.build_model()
+    transmission_network.update_data_with_candidate_solution(candidate_solution['total_capacity'])
     transmission_network.update_model_with_candidate_solution(tso_model, candidate_solution)
     for node_id in transmission_network.active_distribution_network_nodes:
         for year in transmission_network.years:
@@ -486,6 +487,7 @@ def create_distribution_networks_models(distribution_networks, interface_vars, s
 
         # Build model, fix candidate solution, and Run S-MPOPF model
         dso_model = distribution_network.build_model()
+        distribution_network.update_data_with_candidate_solution(candidate_solution['total_capacity'])
         distribution_network.update_model_with_candidate_solution(dso_model, candidate_solution)
         distribution_network.optimize(dso_model)
 
