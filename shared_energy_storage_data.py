@@ -569,8 +569,8 @@ def _build_subproblem_model(shared_ess_data):
                             slack_penalty += PENALTY_ESS_DAY_BALANCE * (model.es_penalty_day_balance_up[e, y, d, s_m, s_o] + model.es_penalty_day_balance_down[e, y, d, s_m, s_o])
 
             # Slack penalties
-            slack_penalty += PENALTY_ESS_SLACK * (model.slack_s_up[e, y] + model.slack_s_down[e, y])
-            slack_penalty += PENALTY_ESS_SLACK * (model.slack_e_up[e, y] + model.slack_e_down[e, y])
+            slack_penalty += PENALTY_ESS_SLACK_FEASIBILITY * (model.slack_s_up[e, y] + model.slack_s_down[e, y])
+            slack_penalty += PENALTY_ESS_SLACK_FEASIBILITY * (model.slack_e_up[e, y] + model.slack_e_down[e, y])
 
             # Capacity available penalties
             if shared_ess_data.params.ess_relax_capacity_available:
