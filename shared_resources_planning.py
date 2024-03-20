@@ -733,15 +733,15 @@ def update_transmission_coordination_model_and_solve(transmission_network, model
 
                 # Update interface PF power requests
                 for p in model[year][day].periods:
-                    model[year][day].dual_pf_p_req[dn, p].fix(dual_pf[node_id][year][day]['p'][p] * s_base)
-                    model[year][day].dual_pf_q_req[dn, p].fix(dual_pf[node_id][year][day]['q'][p] * s_base)
-                    model[year][day].p_pf_req[dn, p].fix(pf_req[node_id][year][day]['p'][p] * s_base)
-                    model[year][day].q_pf_req[dn, p].fix(pf_req[node_id][year][day]['q'][p] * s_base)
+                    model[year][day].dual_pf_p_req[dn, p].fix(dual_pf[node_id][year][day]['p'][p] / s_base)
+                    model[year][day].dual_pf_q_req[dn, p].fix(dual_pf[node_id][year][day]['q'][p] / s_base)
+                    model[year][day].p_pf_req[dn, p].fix(pf_req[node_id][year][day]['p'][p] / s_base)
+                    model[year][day].q_pf_req[dn, p].fix(pf_req[node_id][year][day]['q'][p] / s_base)
 
                 # Update shared ESS capacity and power requests
                 shared_ess_idx = transmission_network.network[year][day].get_shared_energy_storage_idx(node_id)
                 for p in model[year][day].periods:
-                    model[year][day].dual_ess_p[shared_ess_idx, p].fix(dual_ess[node_id][year][day]['p'][p] * s_base)
+                    model[year][day].dual_ess_p[shared_ess_idx, p].fix(dual_ess[node_id][year][day]['p'][p] / s_base)
                     model[year][day].p_ess_req[shared_ess_idx, p].fix(ess_req[node_id][year][day]['p'][p] / s_base)
 
     # Solve!
@@ -788,16 +788,16 @@ def update_distribution_coordination_models_and_solve(distribution_networks, mod
 
                 # Update POWER FLOW variables at connection point
                 for p in model[year][day].periods:
-                    model[year][day].dual_pf_p[p].fix(dual_pf[node_id][year][day]['p'][p] * s_base)
-                    model[year][day].dual_pf_q[p].fix(dual_pf[node_id][year][day]['q'][p] * s_base)
-                    model[year][day].p_pf_req[p].fix(pf_req[node_id][year][day]['p'][p] * s_base)
-                    model[year][day].q_pf_req[p].fix(pf_req[node_id][year][day]['q'][p] * s_base)
+                    model[year][day].dual_pf_p[p].fix(dual_pf[node_id][year][day]['p'][p] / s_base)
+                    model[year][day].dual_pf_q[p].fix(dual_pf[node_id][year][day]['q'][p] / s_base)
+                    model[year][day].p_pf_req[p].fix(pf_req[node_id][year][day]['p'][p] / s_base)
+                    model[year][day].q_pf_req[p].fix(pf_req[node_id][year][day]['q'][p] / s_base)
 
                 # Update SHARED ENERGY STORAGE variables (if existent)
                 shared_ess_idx = distribution_network.network[year][day].get_shared_energy_storage_idx(ref_node_id)
                 for p in model[year][day].periods:
-                    model[year][day].dual_ess_p[p].fix(dual_ess[node_id][year][day]['p'][p] * s_base)
-                    model[year][day].p_ess_req[p].fix(ess_req[node_id][year][day]['p'][p] * s_base)
+                    model[year][day].dual_ess_p[p].fix(dual_ess[node_id][year][day]['p'][p] / s_base)
+                    model[year][day].p_ess_req[p].fix(ess_req[node_id][year][day]['p'][p] / s_base)
 
         # Solve!
         res[node_id] = distribution_network.optimize(model, from_warm_start=from_warm_start)
