@@ -342,7 +342,10 @@ def _build_subproblem_model(shared_ess_data):
                             pdch = model.es_pdch[e, y, d, s_m, s_o, p]
                             pup = model.es_pup[e, y, d, s_m, s_o, p]
                             pdown = model.es_pdown[e, y, d, s_m, s_o, p]
-                            total_ch_dch_day += (num_days / 365) * prob_market * prob_operation * (pch + pdch + pup + pdown)
+                            r_up_activ = shared_ess_data.upward_activation[year][day][s_o][p]           # Share of downward reserve activation
+                            r_down_activ = shared_ess_data.downward_activation[year][day][s_o][p]       # Share of upward reserve activation
+                            total_ch_dch_day += (num_days / 365) * prob_market * prob_operation * (pch + pdch)
+                            total_ch_dch_day += (num_days / 365) * prob_market * prob_operation * (pup * r_up_activ + pdown * r_down_activ)
 
             model.energy_storage_yearly_degradation.add(model.es_e_capacity_degradation[e, y] * total_available_capacity - total_ch_dch_day >= -SMALL_TOLERANCE)
             model.energy_storage_yearly_degradation.add(model.es_e_capacity_degradation[e, y] * total_available_capacity - total_ch_dch_day <= SMALL_TOLERANCE)
