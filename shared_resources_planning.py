@@ -1003,14 +1003,10 @@ def consensus_convergence(planning_problem, consensus_vars, params):
             for node_id in planning_problem.active_distribution_network_nodes:
                 for p in range(planning_problem.num_instants):
                     sum_abs += abs(round(shared_ess_vars['tso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars['esso'][node_id][year][day]['p'][p], ERROR_PRECISION))
-                    sum_abs += abs(round(shared_ess_vars['tso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars['esso'][node_id][year][day]['q'][p], ERROR_PRECISION))
                     sum_abs += abs(round(shared_ess_vars['esso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars['tso'][node_id][year][day]['p'][p], ERROR_PRECISION))
-                    sum_abs += abs(round(shared_ess_vars['esso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars['tso'][node_id][year][day]['q'][p], ERROR_PRECISION))
                     sum_abs += abs(round(shared_ess_vars['dso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars['esso'][node_id][year][day]['p'][p], ERROR_PRECISION))
-                    sum_abs += abs(round(shared_ess_vars['dso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars['esso'][node_id][year][day]['q'][p], ERROR_PRECISION))
                     sum_abs += abs(round(shared_ess_vars['esso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars['dso'][node_id][year][day]['p'][p], ERROR_PRECISION))
-                    sum_abs += abs(round(shared_ess_vars['esso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars['dso'][node_id][year][day]['q'][p], ERROR_PRECISION))
-                    num_elems += 8
+                    num_elems += 4
 
     if sum_abs > params.tol * num_elems:
         if not isclose(sum_abs, params.tol * num_elems, rel_tol=ADMM_CONVERGENCE_REL_TOL, abs_tol=params.tol):
@@ -1055,11 +1051,8 @@ def stationary_convergence(planning_problem, consensus_vars, consensus_vars_prev
                 rho_dso_ess = params.rho['ess'][distribution_network.network[year][day].name]
                 for p in range(planning_problem.num_instants):
                     sum_abs += rho_tso_ess * abs(round(shared_ess_vars['tso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['tso'][node_id][year][day]['p'][p], ERROR_PRECISION))
-                    sum_abs += rho_tso_ess * abs(round(shared_ess_vars['tso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['tso'][node_id][year][day]['q'][p], ERROR_PRECISION))
                     sum_abs += rho_dso_ess * abs(round(shared_ess_vars['dso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['dso'][node_id][year][day]['p'][p], ERROR_PRECISION))
-                    sum_abs += rho_dso_ess * abs(round(shared_ess_vars['dso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['dso'][node_id][year][day]['q'][p], ERROR_PRECISION))
                     sum_abs += rho_esso * abs(round(shared_ess_vars['esso'][node_id][year][day]['p'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['esso'][node_id][year][day]['p'][p], ERROR_PRECISION))
-                    sum_abs += rho_esso * abs(round(shared_ess_vars['esso'][node_id][year][day]['q'][p], ERROR_PRECISION) - round(shared_ess_vars_prev_iter['esso'][node_id][year][day]['q'][p], ERROR_PRECISION))
                     num_elems += 6
 
     if sum_abs > params.tol * num_elems:
