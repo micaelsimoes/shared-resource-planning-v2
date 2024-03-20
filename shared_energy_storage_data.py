@@ -863,6 +863,9 @@ def _process_results(shared_ess_data, model):
                     if shared_ess_data.params.ess_relax_capacity_degradation:
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_up'] = dict()
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_down'] = dict()
+                    if shared_ess_data.params.ess_relax_capacity_relative:
+                        processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_up'] = dict()
+                        processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'] = dict()
 
                     for e in model.energy_storages:
                         node_id = shared_ess_data.shared_energy_storages[year][e].bus
@@ -936,6 +939,10 @@ def _process_results(shared_ess_data, model):
                         if shared_ess_data.params.ess_relax_capacity_degradation:
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_up'][node_id] = pe.value(model.es_penalty_e_capacity_degradation_up[e, y])
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_down'][node_id] = pe.value(model.es_penalty_e_capacity_degradation_down[e, y])
+
+                        if shared_ess_data.params.ess_relax_capacity_relative:
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_up'][node_id] = pe.value(model.es_penalty_e_relative_capacity_up[e, y])
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'][node_id] = pe.value(model.es_penalty_e_relative_capacity_down[e, y])
 
     return processed_results
 
