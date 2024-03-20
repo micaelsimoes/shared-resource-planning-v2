@@ -61,17 +61,16 @@ def shared_resources_planning(working_directory, specification_filename):
     planning_problem.read_planning_problem()
     #planning_problem.plot_diagram()
 
-    '''
     candidate_solution = planning_problem.get_initial_candidate_solution()
     esso_model = planning_problem.shared_ess_data.build_subproblem()
     planning_problem.shared_ess_data.update_model_with_candidate_solution(esso_model, candidate_solution['investment'])
     results = planning_problem.shared_ess_data.optimize(esso_model)
-    processed_results = planning_problem.shared_ess_data.process_results(esso_model)
-    planning_problem.shared_ess_data.write_optimization_results_to_excel(processed_results)
-    '''
+    planning_problem.shared_ess_data.write_optimization_results_to_excel(esso_model)
 
+    '''
     candidate_solution = planning_problem.get_initial_candidate_solution()
     planning_problem.run_operational_planning(candidate_solution=candidate_solution, print_results=True, debug_flag=False)
+    '''
 
     #planning_problem.run_planning_problem()
 
