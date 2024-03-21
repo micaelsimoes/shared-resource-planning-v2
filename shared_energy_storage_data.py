@@ -892,6 +892,13 @@ def _process_results(shared_ess_data, model):
                     if shared_ess_data.params.ess_relax_capacity_relative:
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_up'] = dict()
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'] = dict()
+                    if shared_ess_data.params.ess_relax_secondary_reserve:
+                        processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_up'] = dict()
+                        processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_down'] = dict()
+                        processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pdown_total_up'] = dict()
+                        processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pdown_total_down'] = dict()
+                        processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_up'] = dict()
+                        processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_down'] = dict()
 
                     for e in model.energy_storages:
                         node_id = shared_ess_data.shared_energy_storages[year][e].bus
@@ -973,6 +980,27 @@ def _process_results(shared_ess_data, model):
                                 year2 = repr_years[y2]
                                 processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_up'][node_id][year2] = pe.value(model.es_penalty_e_relative_capacity_up[e, y, y2])
                                 processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'][node_id][year2] = pe.value(model.es_penalty_e_relative_capacity_down[e, y, y2])
+
+                        if shared_ess_data.params.ess_relax_secondary_reserve:
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_up'][node_id] = []
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_down'][node_id] = []
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pdown_total_up'][node_id] = []
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pdown_total_down'][node_id] = []
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_up'][node_id] = []
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_down'][node_id] = []
+                            for p in model.periods:
+                                pup_total_up = model.es_penalty_pup_total_up[y, d, p]
+                                pup_total_down = model.es_penalty_pup_total_down[y, d, p]
+                                pdown_total_up = model.es_penalty_pdown_total_up[y, d, p]
+                                pdown_total_down = model.es_penalty_pdown_total_down[y, d, p]
+                                reserve_splitting_up = model.es_penaly_reserve_splitting_up[y, d, p]
+                                reserve_splitting_down = model.es_penaly_reserve_splitting_down[y, d, p]
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_up'][node_id].append(pup_total_up)
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_down'][node_id].append(pup_total_down)
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pdown_total_up'][node_id].append(pdown_total_up)
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pdown_total_down'][node_id].append(pdown_total_down)
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_up'][node_id].append(reserve_splitting_up)
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_down'][node_id].append(reserve_splitting_down)
 
     return processed_results
 
