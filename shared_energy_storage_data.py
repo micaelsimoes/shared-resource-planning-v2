@@ -665,8 +665,10 @@ def _optimize(model, params, from_warm_start=False):
         solver.options['warm_start_slack_bound_frac'] = 1e-9
         solver.options['warm_start_slack_bound_push'] = 1e-9
         solver.options['warm_start_mult_bound_push'] = 1e-9
+        '''
         solver.options['mu_strategy'] = 'monotone'
         solver.options['mu_init'] = 1e-9
+        '''
 
     if params.verbose:
         solver.options['print_level'] = 6
