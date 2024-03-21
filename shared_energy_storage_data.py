@@ -941,8 +941,12 @@ def _process_results(shared_ess_data, model):
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_down'][node_id] = pe.value(model.es_penalty_e_capacity_degradation_down[e, y])
 
                         if shared_ess_data.params.ess_relax_capacity_relative:
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_up'][node_id] = pe.value(model.es_penalty_e_relative_capacity_up[e, y])
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'][node_id] = pe.value(model.es_penalty_e_relative_capacity_down[e, y])
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_up'][node_id] = dict()
+                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'][node_id] = dict()
+                            for y2 in model.years:
+                                year2 = repr_years[y2]
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_up'][node_id][year2] = pe.value(model.es_penalty_e_relative_capacity_up[e, y])
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'][node_id][year2] = pe.value(model.es_penalty_e_relative_capacity_down[e, y])
 
     return processed_results
 
