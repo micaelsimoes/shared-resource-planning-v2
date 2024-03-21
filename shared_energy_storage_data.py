@@ -1919,6 +1919,33 @@ def _write_relaxation_slacks_results_to_excel(shared_ess_data, workbook, results
                                 sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
                             row_idx = row_idx + 1
 
+                        # Expected values
+                        if shared_ess_data.params.ess_interface_relax:
+
+                            # - Expected active power, up
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'expected_p_up'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(shared_ess_data.num_instants):
+                                sheet.cell(row=row_idx, column=p + 7).value = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['expected_p_up'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
+                            # - Expected active power, down
+                            sheet.cell(row=row_idx, column=1).value = node_id
+                            sheet.cell(row=row_idx, column=2).value = int(year)
+                            sheet.cell(row=row_idx, column=3).value = day
+                            sheet.cell(row=row_idx, column=4).value = 'expected_p_down'
+                            sheet.cell(row=row_idx, column=5).value = s_m
+                            sheet.cell(row=row_idx, column=6).value = s_o
+                            for p in range(shared_ess_data.num_instants):
+                                sheet.cell(row=row_idx, column=p + 7).value = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['expected_p_down'][node_id][p]
+                                sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
+                            row_idx = row_idx + 1
+
 
 def _write_relaxation_slacks_yoy_results_to_excel(shared_ess_data, workbook, results):
 
