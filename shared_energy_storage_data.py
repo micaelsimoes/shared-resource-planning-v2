@@ -286,6 +286,13 @@ def _build_subproblem_model(shared_ess_data):
     if shared_ess_data.params.ess_relax_capacity_relative:
         model.es_penalty_e_relative_capacity_up = pe.Var(model.energy_storages, model.years, model.years, domain=pe.NonNegativeReals, initialize=0.0)
         model.es_penalty_e_relative_capacity_down = pe.Var(model.energy_storages, model.years, model.years, domain=pe.NonNegativeReals, initialize=0.0)
+    if shared_ess_data.params.ess_relax_secondary_reserve:
+        model.es_penalty_pup_total_up = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_pup_total_down = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_pdown_total_up = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_pdown_total_down = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penaly_reserve_splitting_up = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penaly_reserve_splitting_down = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
     for e in model.energy_storages:
         for y in model.years:
             model.es_e_capacity_degradation[e, y].setub(1.00)
@@ -518,12 +525,17 @@ def _build_subproblem_model(shared_ess_data):
                             pup_period += prob_market * prob_operation * model.es_pup[e, y, d, s_m, s_o, p]
                             pdown_period += prob_market * prob_operation * model.es_pdown[e, y, d, s_m, s_o, p]
 
-                model.secondary_reserve.add(model.pup_total[y, d, p] - pup_period >= -SMALL_TOLERANCE)
-                model.secondary_reserve.add(model.pup_total[y, d, p] - pup_period <= SMALL_TOLERANCE)
-                model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period >= -SMALL_TOLERANCE)
-                model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period <= SMALL_TOLERANCE)
-                model.secondary_reserve.add(model.pup_total[y, d, p] - 2 * model.pdown_total[y, d, p] >= -SMALL_TOLERANCE)
-                model.secondary_reserve.add(model.pup_total[y, d, p] - 2 * model.pdown_total[y, d, p] <= SMALL_TOLERANCE)
+                if shared_ess_data.params.ess_relax_secondary_reserve:
+                    model.secondary_reserve.add(model.pup_total[y, d, p] - pup_period == model.es_penalty_pup_total_up[y, d, p] - model.es_penalty_pup_total_down[y, d, p])
+                    model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period == model.es_penalty_pdown_total_up[y, d, p] - model.es_penalty_pdown_total_down[y, d, p])
+                    model.secondary_reserve.add(model.pup_total[y, d, p] - 2 * model.pdown_total[y, d, p] == model.es_penaly_reserve_splitting_up[y, d, p] - model.es_penaly_reserve_splitting_down[y, d, p])
+                else:
+                    model.secondary_reserve.add(model.pup_total[y, d, p] - pup_period >= -SMALL_TOLERANCE)
+                    model.secondary_reserve.add(model.pup_total[y, d, p] - pup_period <= SMALL_TOLERANCE)
+                    model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period >= -SMALL_TOLERANCE)
+                    model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period <= SMALL_TOLERANCE)
+                    model.secondary_reserve.add(model.pup_total[y, d, p] - 2 * model.pdown_total[y, d, p] >= -SMALL_TOLERANCE)
+                    model.secondary_reserve.add(model.pup_total[y, d, p] - 2 * model.pdown_total[y, d, p] <= SMALL_TOLERANCE)
 
     # - Sensitivities - Einv and Sinv as a function of Einv_fixed and Sinv_fixed
     model.sensitivities_s = pe.ConstraintList()
@@ -605,6 +617,13 @@ def _build_subproblem_model(shared_ess_data):
             if shared_ess_data.params.ess_relax_capacity_relative:
                 for x in model.years:
                     slack_penalty += PENALTY_ESS_CAPACITY_RELATIVE * (model.es_penalty_e_relative_capacity_up[e, y, x] + model.es_penalty_e_relative_capacity_down[e, y, x])
+
+    for y in model.years:
+        for d in model.days:
+            for p in model.periods:
+                slack_penalty += PENALTY_ESS_RESERVE * (model.es_penalty_pup_total_up[y, d, p] + model.es_penalty_pup_total_down[y, d, p])
+                slack_penalty += PENALTY_ESS_RESERVE * (model.es_penalty_pdown_total_up[y, d, p] + model.es_penalty_pdown_total_down[y, d, p])
+                slack_penalty += PENALTY_ESS_RESERVE * (model.es_penaly_reserve_splitting_up[y, d, p] - model.es_penaly_reserve_splitting_down[y, d, p])
 
     obj = operational_cost + slack_penalty
     model.objective = pe.Objective(sense=pe.minimize, expr=obj)
