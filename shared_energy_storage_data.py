@@ -1807,7 +1807,7 @@ def _write_relaxation_slacks_yoy_results_to_excel(shared_ess_data, workbook, res
     sheet.cell(row=row_idx, column=2).value = 'Year (from)'
     sheet.cell(row=row_idx, column=3).value = 'Year (to)'
     sheet.cell(row=row_idx, column=4).value = 'Quantity'
-    sheet.cell(row=row_idx, column=4).value = 'Value'
+    sheet.cell(row=row_idx, column=5).value = 'Value'
     row_idx = row_idx + 1
 
     for node_id in shared_ess_data.active_distribution_network_nodes:
