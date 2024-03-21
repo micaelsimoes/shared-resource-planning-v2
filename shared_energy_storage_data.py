@@ -122,12 +122,15 @@ class SharedEnergyStorageData:
         processed_results = self.process_results(model)
         _write_optimization_results_to_excel(self, self.results_dir, processed_results, shared_ess_capacity)
 
-    def get_investment_and_available_capacities(self, model):
-        return _get_investment_and_available_capacities(self, model)
-
     def write_ess_results_to_excel(self, workbook, shared_ess_capacity):
         _write_ess_capacity_investment_to_excel(self, workbook, shared_ess_capacity['investment'])
         _write_ess_capacity_available_to_excel(self, workbook, shared_ess_capacity['available'])
+
+    def write_secondary_reserve_bands_to_excel(self, workbook, results):
+        _write_secondary_reserve_bands_to_excel(self, workbook, results)
+
+    def get_investment_and_available_capacities(self, model):
+        return _get_investment_and_available_capacities(self, model)
 
 
 # ======================================================================================================================
@@ -1109,9 +1112,9 @@ def _write_optimization_results_to_excel(shared_ess_data, data_dir, results, sha
     _write_main_info_to_excel(shared_ess_data, wb, results)
     _write_ess_capacity_investment_to_excel(shared_ess_data, wb, shared_ess_capacity['investment'])
     _write_ess_capacity_available_to_excel(shared_ess_data, wb, shared_ess_capacity['available'])
-    #_write_secondary_reserve_bands_to_excel(shared_ess_data, wb, results['results'])
+    _write_secondary_reserve_bands_to_excel(shared_ess_data, wb, results['results'])
     _write_market_cost_values_to_excel(shared_ess_data, wb)
-    _write_shared_network_energy_storage_results_to_excel(shared_ess_data, wb, results['results'])
+    _write_shared_energy_storage_results_to_excel(shared_ess_data, wb, results['results'])
     _write_relaxation_slacks_results_to_excel(shared_ess_data, wb, results['results'])
     if shared_ess_data.params.ess_relax_capacity_relative:
         _write_relaxation_slacks_yoy_results_to_excel(shared_ess_data, wb, results)
@@ -1322,8 +1325,8 @@ def _write_secondary_reserve_bands_to_excel(shared_ess_data, workbook, results):
                     for s_o in range(len(shared_ess_data.prob_operation_scenarios)):
                         prob_oper_scn = shared_ess_data.prob_operation_scenarios[s_o]
                         for p in range(shared_ess_data.num_instants):
-                            pup = results[year][day][s_m][s_o]['p_up'][node_id][p]
-                            pdown = results[year][day][s_m][s_o]['p_down'][node_id][p]
+                            pup = results[year][day]['scenarios'][s_m][s_o]['p_up'][node_id][p]
+                            pdown = results[year][day]['scenarios'][s_m][s_o]['p_down'][node_id][p]
                             if pup != 'N/A':
                                 pup_total[p] += pup * prob_market_scn * prob_oper_scn
                             if pdown != 'N/A':
@@ -1415,7 +1418,7 @@ def _write_market_cost_values_to_excel(shared_ess_data, workbook):
                     sheet.cell(row=line_idx, column=p + 6).number_format = decimal_style
 
 
-def _write_shared_network_energy_storage_results_to_excel(shared_ess_data, workbook, results):
+def _write_shared_energy_storage_results_to_excel(shared_ess_data, workbook, results):
 
     sheet = workbook.create_sheet('Shared Energy Storage')
 

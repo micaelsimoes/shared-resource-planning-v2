@@ -1388,6 +1388,7 @@ def _write_operational_planning_results_to_excel(planning_problem, results, prim
     #_write_shared_ess_specifications(wb, planning_problem.shared_ess_data)
     if shared_ess_capacity:
         planning_problem.shared_ess_data.write_ess_results_to_excel(wb, shared_ess_capacity)
+    planning_problem.shared_ess_data.write_secondary_reserve_bands_to_excel(wb, results['esso']['results'])
 
     if primal_evolution:
         _write_objective_function_evolution_to_excel(wb, primal_evolution)
