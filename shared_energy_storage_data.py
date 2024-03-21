@@ -1034,6 +1034,8 @@ def _write_optimization_results_to_excel(shared_ess_data, data_dir, results, sha
     _write_market_cost_values_to_excel(shared_ess_data, wb)
     _write_shared_network_energy_storage_results_to_excel(shared_ess_data, wb, results['results'])
     _write_relaxation_slacks_results_to_excel(shared_ess_data, wb, results['results'])
+    if shared_ess_data.params.ess_relax_capacity_relative:
+        _write_relaxation_slacks_yoy_results_to_excel(shared_ess_data, wb, results)
 
     results_filename = os.path.join(data_dir, f'{shared_ess_data.name}_shared_ess_results.xlsx')
     try:
