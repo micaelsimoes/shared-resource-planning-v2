@@ -989,12 +989,12 @@ def _process_results(shared_ess_data, model):
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_up'][node_id] = []
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_down'][node_id] = []
                             for p in model.periods:
-                                pup_total_up = model.es_penalty_pup_total_up[y, d, p]
-                                pup_total_down = model.es_penalty_pup_total_down[y, d, p]
-                                pdown_total_up = model.es_penalty_pdown_total_up[y, d, p]
-                                pdown_total_down = model.es_penalty_pdown_total_down[y, d, p]
-                                reserve_splitting_up = model.es_penaly_reserve_splitting_up[y, d, p]
-                                reserve_splitting_down = model.es_penaly_reserve_splitting_down[y, d, p]
+                                pup_total_up = pe.value(model.es_penalty_pup_total_up[y, d, p])
+                                pup_total_down = pe.value(model.es_penalty_pup_total_down[y, d, p])
+                                pdown_total_up = pe.value(model.es_penalty_pdown_total_up[y, d, p])
+                                pdown_total_down = pe.value(model.es_penalty_pdown_total_down[y, d, p])
+                                reserve_splitting_up = pe.value(model.es_penaly_reserve_splitting_up[y, d, p])
+                                reserve_splitting_down = pe.value(model.es_penaly_reserve_splitting_down[y, d, p])
                                 processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_up'][node_id].append(pup_total_up)
                                 processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_down'][node_id].append(pup_total_down)
                                 processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pdown_total_up'][node_id].append(pdown_total_up)
