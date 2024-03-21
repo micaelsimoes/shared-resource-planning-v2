@@ -77,7 +77,8 @@ class SharedResourcesPlanning:
     def write_operational_planning_results_to_excel(self, optimization_models, results, primal_evolution=list()):
         filename = os.path.join(self.results_dir, self.name + '_operational_planning_results.xlsx')
         processed_results = _process_operational_planning_results(self, optimization_models['tso'], optimization_models['dso'], optimization_models['esso'], results)
-        _write_operational_planning_results_to_excel(self, processed_results, primal_evolution=primal_evolution, filename=filename)
+        shared_ess_capacity = self.shared_ess_data.get_investment_and_available_capacities(optimization_models['esso'])
+        _write_operational_planning_results_to_excel(self, processed_results, primal_evolution=primal_evolution, shared_ess_capacity=shared_ess_capacity, filename=filename)
 
     def plot_diagram(self):
         _plot_networkx_diagram(self)
@@ -1379,12 +1380,14 @@ def _process_results_interface_power_flow(planning_problem, tso_model, dso_model
 # ======================================================================================================================
 #  RESULTS OPERATIONAL PLANNING - write functions
 # ======================================================================================================================
-def _write_operational_planning_results_to_excel(planning_problem, results, primal_evolution=list(), filename='operation_planning_results'):
+def _write_operational_planning_results_to_excel(planning_problem, results, primal_evolution=list(), shared_ess_capacity=dict(), filename='operation_planning_results'):
 
     wb = Workbook()
 
     _write_operational_planning_main_info_to_excel(planning_problem, wb, results)
-    _write_shared_ess_specifications(wb, planning_problem.shared_ess_data)
+    #_write_shared_ess_specifications(wb, planning_problem.shared_ess_data)
+    if shared_ess_capacity:
+        planning_problem.shared_ess_data.write_ess_results_to_excel(wb, shared_ess_capacity)
 
     if primal_evolution:
         _write_objective_function_evolution_to_excel(wb, primal_evolution)
