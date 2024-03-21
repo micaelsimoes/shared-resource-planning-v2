@@ -951,8 +951,8 @@ def _process_results(shared_ess_data, model):
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'][node_id] = dict()
                             for y2 in model.years:
                                 year2 = repr_years[y2]
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_up'][node_id][year2] = pe.value(model.es_penalty_e_relative_capacity_up[e, y])
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'][node_id][year2] = pe.value(model.es_penalty_e_relative_capacity_down[e, y])
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_up'][node_id][year2] = pe.value(model.es_penalty_e_relative_capacity_up[e, y, y2])
+                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'][node_id][year2] = pe.value(model.es_penalty_e_relative_capacity_down[e, y, y2])
 
     return processed_results
 
