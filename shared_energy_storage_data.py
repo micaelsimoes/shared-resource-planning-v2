@@ -1768,3 +1768,44 @@ def _write_relaxation_slacks_results_to_excel(shared_ess_data, workbook, results
                                 sheet.cell(row=row_idx, column=p + 7).value = results[year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_down'][node_id]
                                 sheet.cell(row=row_idx, column=p + 7).number_format = decimal_style
                             row_idx = row_idx + 1
+
+
+def _write_relaxation_slacks_yoy_results_to_excel(shared_ess_data, workbook, results):
+
+    sheet = workbook.create_sheet('Relaxation Slacks (2)')
+
+    years = [year for year in shared_ess_data.years]
+    days = [day for day in shared_ess_data.days]
+
+    row_idx = 1
+    decimal_style = '0.00'
+
+    # Write Header
+    sheet.cell(row=row_idx, column=1).value = 'Node ID'
+    sheet.cell(row=row_idx, column=2).value = 'Year (from)'
+    sheet.cell(row=row_idx, column=3).value = 'Year (to)'
+    sheet.cell(row=row_idx, column=4).value = 'Quantity'
+    sheet.cell(row=row_idx, column=4).value = 'Value'
+    row_idx = row_idx + 1
+
+    for node_id in shared_ess_data.active_distribution_network_nodes:
+        for year in years:
+            for year2 in years:
+
+                # Slack, Relative capacity up
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = int(year)
+                sheet.cell(row=row_idx, column=3).value = int(year2)
+                sheet.cell(row=row_idx, column=4).value = 'Relative capacity, up'
+                sheet.cell(row=row_idx, column=5).value = results['results'][year][days[0]]['scenarios'][0][0]['relaxation_slacks']['relative_capacity_up'][node_id][year2]
+                sheet.cell(row=row_idx, column=5).number_format = decimal_style
+                row_idx = row_idx + 1
+
+                # Slack, Relative capacity down
+                sheet.cell(row=row_idx, column=1).value = node_id
+                sheet.cell(row=row_idx, column=2).value = int(year)
+                sheet.cell(row=row_idx, column=3).value = int(year2)
+                sheet.cell(row=row_idx, column=4).value = 'Relative capacity, down'
+                sheet.cell(row=row_idx, column=5).value = results['results'][year][days[0]]['scenarios'][0][0]['relaxation_slacks']['relative_capacity_down'][node_id][year2]
+                sheet.cell(row=row_idx, column=5).number_format = decimal_style
+                row_idx = row_idx + 1
