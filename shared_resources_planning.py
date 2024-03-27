@@ -1177,10 +1177,10 @@ def _read_planning_problem(planning_problem):
     shared_ess_data.cost_secondary_reserve = planning_problem.cost_secondary_reserve
     shared_ess_data.cost_tertiary_reserve_up = planning_problem.cost_tertiary_reserve_up
     shared_ess_data.cost_tertiary_reserve_down = planning_problem.cost_tertiary_reserve_down
-    shared_ess_data.params_file = planning_data['SharedEnegyStorage']['params_file']
+    shared_ess_data.params_file = planning_data['SharedEnergyStorage']['params_file']
     shared_ess_data.read_parameters_from_file()
     shared_ess_data.create_shared_energy_storages(planning_problem)
-    shared_ess_data.data_file = planning_data['SharedEnegyStorage']['data_file']
+    shared_ess_data.data_file = planning_data['SharedEnergyStorage']['data_file']
     shared_ess_data.read_shared_energy_storage_data_from_file()
     shared_ess_data.active_distribution_network_nodes = [node_id for node_id in planning_problem.distribution_networks]
     planning_problem.shared_ess_data = shared_ess_data

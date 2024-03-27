@@ -23,7 +23,7 @@
 		"name": "case30",
 		"params_file": "case30_params.json"
 	},
-	"SharedEnegyStorage":{
+	"SharedEnergyStorage":{
 		"params_file": "CS1_ESS_Params.json",
 		"data_file": "CS1_ESS.xlsx"
 	},
