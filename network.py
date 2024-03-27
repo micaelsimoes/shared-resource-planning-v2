@@ -1006,6 +1006,7 @@ def _build_model(network, params):
 
                 obj += obj_scenario * omega_market * omega_oper
 
+        # Interface slack penalties
         if network.is_transmission:
             for dn in model.active_distribution_networks:
                 for p in model.periods:
@@ -1023,6 +1024,46 @@ def _build_model(network, params):
                     obj += PENALTY_INTERFACE_POWER_FLOW * (model.penalty_expected_interface_pf_q_up[p] + model.penalty_expected_interface_pf_q_down[p])
                 if params.interface_ess_relax:
                     obj += PENALTY_INTERFACE_ESS * (model.penalty_expected_shared_ess_p_up[p] + model.penalty_expected_shared_ess_p_down[p])
+
+        # Harmonization penalties - interface PF
+        if params.interface_pf_harmonize:
+            if network.is_transmission:
+                for dn in model.active_distribution_networks:
+                    node_id = network.active_distribution_network_nodes[dn]
+                    node_idx = network.get_node_idx(node_id)
+                    for s_m in model.scenarios_market:
+                        for s_o in model.scenarios_operation:
+                            for p in model.periods:
+                                obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.e_actual[node_idx, s_m, s_o, p] - model.e_actual[node_idx, 0, 0, p]) ** 2
+                                obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.f_actual[node_idx, s_m, s_o, p] - model.f_actual[node_idx, 0, 0, p]) ** 2
+                                obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.pc[node_idx, s_m, s_o, p] - model.pc[node_idx, 0, 0, p]) ** 2
+                                obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.qc[node_idx, s_m, s_o, p] - model.qc[node_idx, 0, 0, p]) ** 2
+            else:
+                ref_node_idx = network.get_node_idx(ref_node_id)
+                ref_gen_idx = network.get_reference_gen_idx()
+                for s_m in model.scenarios_market:
+                    for s_o in model.scenarios_operation:
+                        for p in model.periods:
+                            obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.e_actual[ref_node_idx, s_m, s_o, p] - model.e_actual[ref_node_idx, 0, 0, p]) ** 2
+                            obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.pg[ref_gen_idx, s_m, s_o, p] - model.pg[ref_gen_idx, 0, 0, p]) ** 2
+                            obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.qg[ref_gen_idx, s_m, s_o, p] - model.qg[ref_gen_idx, 0, 0, p]) ** 2
+
+        # Harmonization penalties - Shared ESSs
+        if params.interface_ess_harmonize:
+            if network.is_transmission:
+                for e in model.shared_energy_storages:
+                    for s_m in model.scenarios_market:
+                        for s_o in model.scenarios_operation:
+                            for p in model.periods:
+                                obj += PENALTY_HARMONIZATION_SHARED_ESS * (model.shared_es_pch[e, s_m, s_o, p] - model.shared_es_pch[e, 0, 0, p]) ** 2
+                                obj += PENALTY_HARMONIZATION_SHARED_ESS * (model.shared_es_pdch[e, s_m, s_o, p] - model.shared_es_pdch[e, 0, 0, p]) ** 2
+            else:
+                shared_ess_idx = network.get_shared_energy_storage_idx(ref_node_id)
+                for s_m in model.scenarios_market:
+                    for s_o in model.scenarios_operation:
+                        for p in model.periods:
+                            obj += PENALTY_HARMONIZATION_SHARED_ESS * (model.shared_es_pch[shared_ess_idx, s_m, s_o, p] - model.shared_es_pch[shared_ess_idx, 0, 0, p]) ** 2
+                            obj += PENALTY_HARMONIZATION_SHARED_ESS * (model.shared_es_pdch[shared_ess_idx, s_m, s_o, p] - model.shared_es_pdch[shared_ess_idx, 0, 0, p]) ** 2
 
         for e in model.shared_energy_storages:
             obj += PENALTY_ESS_SLACK * (model.shared_es_s_slack_up[e] + model.shared_es_s_slack_down[e])
@@ -1119,6 +1160,7 @@ def _build_model(network, params):
 
                 obj += obj_scenario * omega_market * omega_oper
 
+        # Interface slack penalties
         if network.is_transmission:
             for dn in model.active_distribution_networks:
                 for p in model.periods:
@@ -1128,7 +1170,6 @@ def _build_model(network, params):
                         obj += PENALTY_INTERFACE_POWER_FLOW * (model.penalty_expected_interface_pf_q_up[dn, p] + model.penalty_expected_interface_pf_q_down[dn, p])
                     if params.interface_ess_relax:
                         obj += PENALTY_INTERFACE_ESS * (model.penalty_expected_shared_ess_p_up[dn, p] + model.penalty_expected_shared_ess_p_down[dn, p])
-                        obj += PENALTY_INTERFACE_ESS * (model.penalty_expected_shared_ess_q_up[dn, p] + model.penalty_expected_shared_ess_q_down[dn, p])
         else:
             for p in model.periods:
                 if params.interface_pf_relax:
@@ -1137,6 +1178,46 @@ def _build_model(network, params):
                     obj += PENALTY_INTERFACE_POWER_FLOW * (model.penalty_expected_interface_pf_q_up[p] + model.penalty_expected_interface_pf_q_down[p])
                 if params.interface_ess_relax:
                     obj += PENALTY_INTERFACE_ESS * (model.penalty_expected_shared_ess_p_up[p] + model.penalty_expected_shared_ess_p_down[p])
+
+        # Harmonization penalties - interface PF
+        if params.interface_pf_harmonize:
+            if network.is_transmission:
+                for dn in model.active_distribution_networks:
+                    node_id = network.active_distribution_network_nodes[dn]
+                    node_idx = network.get_node_idx(node_id)
+                    for s_m in model.scenarios_market:
+                        for s_o in model.scenarios_operation:
+                            for p in model.periods:
+                                obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.e_actual[node_idx, s_m, s_o, p] - model.e_actual[node_idx, 0, 0, p]) ** 2
+                                obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.f_actual[node_idx, s_m, s_o, p] - model.f_actual[node_idx, 0, 0, p]) ** 2
+                                obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.pc[node_idx, s_m, s_o, p] - model.pc[node_idx, 0, 0, p]) ** 2
+                                obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.qc[node_idx, s_m, s_o, p] - model.qc[node_idx, 0, 0, p]) ** 2
+            else:
+                ref_node_idx = network.get_node_idx(ref_node_id)
+                ref_gen_idx = network.get_reference_gen_idx()
+                for s_m in model.scenarios_market:
+                    for s_o in model.scenarios_operation:
+                        for p in model.periods:
+                            obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.e_actual[ref_node_idx, s_m, s_o, p] - model.e_actual[ref_node_idx, 0, 0, p]) ** 2
+                            obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.pg[ref_gen_idx, s_m, s_o, p] - model.pg[ref_gen_idx, 0, 0, p]) ** 2
+                            obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.qg[ref_gen_idx, s_m, s_o, p] - model.qg[ref_gen_idx, 0, 0, p]) ** 2
+
+        # Harmonization penalties - Shared ESSs
+        if params.interface_ess_harmonize:
+            if network.is_transmission:
+                for e in model.shared_energy_storages:
+                    for s_m in model.scenarios_market:
+                        for s_o in model.scenarios_operation:
+                            for p in model.periods:
+                                obj += PENALTY_HARMONIZATION_SHARED_ESS * (model.shared_es_pch[e, s_m, s_o, p] - model.shared_es_pch[e, 0, 0, p]) ** 2
+                                obj += PENALTY_HARMONIZATION_SHARED_ESS * (model.shared_es_pdch[e, s_m, s_o, p] - model.shared_es_pdch[e, 0, 0, p]) ** 2
+            else:
+                shared_ess_idx = network.get_shared_energy_storage_idx(ref_node_id)
+                for s_m in model.scenarios_market:
+                    for s_o in model.scenarios_operation:
+                        for p in model.periods:
+                            obj += PENALTY_HARMONIZATION_SHARED_ESS * (model.shared_es_pch[shared_ess_idx, s_m, s_o, p] - model.shared_es_pch[shared_ess_idx, 0, 0, p]) ** 2
+                            obj += PENALTY_HARMONIZATION_SHARED_ESS * (model.shared_es_pdch[shared_ess_idx, s_m, s_o, p] - model.shared_es_pdch[shared_ess_idx, 0, 0, p]) ** 2
 
         for e in model.shared_energy_storages:
             obj += PENALTY_ESS_SLACK * (model.shared_es_s_slack_up[e] + model.shared_es_s_slack_down[e])
