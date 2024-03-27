@@ -67,6 +67,7 @@ def shared_resources_planning(working_directory, specification_filename):
     planning_problem.run_operational_planning(candidate_solution=candidate_solution, print_results=True, debug_flag=False)
     '''
 
+    '''
     transmission_network = planning_problem.transmission_network
     candidate_solution = planning_problem.get_initial_candidate_solution()
     transmission_network.update_data_with_candidate_solution(candidate_solution['total_capacity'])
@@ -74,7 +75,9 @@ def shared_resources_planning(working_directory, specification_filename):
     results = transmission_network.optimize(tn_model)
     processed_results = transmission_network.process_results(tn_model, results)
     transmission_network.write_optimization_results_to_excel(processed_results)
+    '''
 
+    '''
     distribution_networks = planning_problem.distribution_networks
     candidate_solution = planning_problem.get_initial_candidate_solution()
     for node_id in distribution_networks:
@@ -84,6 +87,7 @@ def shared_resources_planning(working_directory, specification_filename):
         results = distribution_network.optimize(dn_model)
         processed_results = distribution_network.process_results(dn_model, results)
         distribution_network.write_optimization_results_to_excel(processed_results)
+    '''
 
     candidate_solution = planning_problem.get_initial_candidate_solution()
     esso_model = planning_problem.shared_ess_data.build_subproblem()
