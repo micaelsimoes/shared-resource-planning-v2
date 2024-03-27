@@ -28,6 +28,8 @@ class NetworkParameters:
         self.interface_pf_relax = False
         self.interface_ess_relax = False
         self.slacks_used = False
+        self.interface_pf_harmonize = True
+        self.interface_ess_harmonize = True
         self.print_to_screen = False
         self.plot_diagram = False
         self.print_results_to_file = False
