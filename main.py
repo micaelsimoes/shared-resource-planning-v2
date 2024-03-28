@@ -68,13 +68,16 @@ def shared_resources_planning(working_directory, specification_filename):
 
     candidate_solution = planning_problem.get_initial_candidate_solution()
 
+    '''
     transmission_network = planning_problem.transmission_network
     transmission_network.update_data_with_candidate_solution(candidate_solution['total_capacity'])
     tn_model = transmission_network.build_model()
     results = transmission_network.optimize(tn_model)
     processed_results = transmission_network.process_results(tn_model, results)
     transmission_network.write_optimization_results_to_excel(processed_results)
+    '''
 
+    '''
     distribution_networks = planning_problem.distribution_networks
     for node_id in distribution_networks:
         distribution_network = distribution_networks[node_id]
@@ -83,13 +86,15 @@ def shared_resources_planning(working_directory, specification_filename):
         results = distribution_network.optimize(dn_model)
         processed_results = distribution_network.process_results(dn_model, results)
         distribution_network.write_optimization_results_to_excel(processed_results)
+    '''
 
+    '''
     candidate_solution = planning_problem.get_initial_candidate_solution()
     esso_model = planning_problem.shared_ess_data.build_subproblem()
     planning_problem.shared_ess_data.update_model_with_candidate_solution(esso_model, candidate_solution['investment'])
     results = planning_problem.shared_ess_data.optimize(esso_model)
     planning_problem.shared_ess_data.write_optimization_results_to_excel(esso_model)
-
+    '''
 
     print('==========================================================================================================')
     print('                                                 END                                                      ')
