@@ -843,7 +843,7 @@ def update_shared_energy_storages_coordination_model_and_solve(planning_problem,
                     model.p_req_distr[e, y, d, p].fix(ess_req['dso'][node_id][year][day]['p'][p])
                     model.p_req_prev[e, y, d, p].fix(ess_prev['esso'][node_id][year][day]['p'][p])
                     model.dual_p_transm[e, y, d, p].fix(dual_ess['esso']['tso'][node_id][year][day]['p'][p])
-                    model.dual_p_transm[e, y, d, p].fix(dual_ess['esso']['sso'][node_id][year][day]['p'][p])
+                    model.dual_p_distr[e, y, d, p].fix(dual_ess['esso']['dso'][node_id][year][day]['p'][p])
                     model.dual_p_prev[e, y, d, p].fix(dual_ess['esso']['prev'][node_id][year][day]['p'][p])
 
     # Solve!
