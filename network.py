@@ -1034,8 +1034,8 @@ def _build_model(network, params):
                     for s_m in model.scenarios_market:
                         for s_o in model.scenarios_operation:
                             for p in model.periods:
-                                obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.e_actual[node_idx, s_m, s_o, p] - model.e_actual[node_idx, 0, 0, p]) ** 2
-                                obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.f_actual[node_idx, s_m, s_o, p] - model.f_actual[node_idx, 0, 0, p]) ** 2
+                                #obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.e_actual[node_idx, s_m, s_o, p] - model.e_actual[node_idx, s_m, 0, p]) ** 2
+                                #obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.f_actual[node_idx, s_m, s_o, p] - model.f_actual[node_idx, s_m, 0, p]) ** 2
                                 obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.pc[node_idx, s_m, s_o, p] - model.pc[node_idx, 0, 0, p]) ** 2
                                 obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.qc[node_idx, s_m, s_o, p] - model.qc[node_idx, 0, 0, p]) ** 2
             else:
@@ -1188,8 +1188,6 @@ def _build_model(network, params):
                     for s_m in model.scenarios_market:
                         for s_o in model.scenarios_operation:
                             for p in model.periods:
-                                obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.e_actual[node_idx, s_m, s_o, p] - model.e_actual[node_idx, 0, 0, p]) ** 2
-                                obj += PENALTY_HARMONIZATION_INTERFACE_VMAG * (model.f_actual[node_idx, s_m, s_o, p] - model.f_actual[node_idx, 0, 0, p]) ** 2
                                 obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.pc[node_idx, s_m, s_o, p] - model.pc[node_idx, 0, 0, p]) ** 2
                                 obj += PENALTY_HARMONIZATION_INTERFACE_PF * (model.qc[node_idx, s_m, s_o, p] - model.qc[node_idx, 0, 0, p]) ** 2
             else:
