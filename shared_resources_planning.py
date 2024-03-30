@@ -651,7 +651,6 @@ def update_distribution_models_to_admm(distribution_networks, models, initial_in
                 dso_model[year][day].dual_pf_p = pe.Var(dso_model[year][day].periods, domain=pe.Reals)   # Dual variable - active power
                 dso_model[year][day].dual_pf_q = pe.Var(dso_model[year][day].periods, domain=pe.Reals)   # Dual variable - reactive power
 
-
                 dso_model[year][day].rho_ess = pe.Var(domain=pe.NonNegativeReals)
                 dso_model[year][day].rho_ess.fix(params.rho['ess'][distribution_network.network[year][day].name])
                 dso_model[year][day].p_ess_req = pe.Var(dso_model[year][day].periods, domain=pe.Reals)      # Shared ESS - active power requested (TSO/ESSO)
@@ -800,7 +799,6 @@ def update_distribution_coordination_models_and_solve(distribution_networks, mod
                     model[year][day].q_pf_req[p].fix(pf_req[node_id][year][day]['q'][p] / s_base)
 
                 # Update SHARED ENERGY STORAGE variables (if existent)
-                shared_ess_idx = distribution_network.network[year][day].get_shared_energy_storage_idx(ref_node_id)
                 for p in model[year][day].periods:
                     model[year][day].dual_ess_p[p].fix(dual_ess[node_id][year][day]['p'][p] / s_base)
                     model[year][day].p_ess_req[p].fix(ess_req[node_id][year][day]['p'][p] / s_base)
@@ -4496,8 +4494,8 @@ def _get_initial_candidate_solution(planning_problem):
             candidate_solution['investment'][node_id][year]['s'] = 0.00
             candidate_solution['investment'][node_id][year]['e'] = 0.00
             if year == 2020 or year == 2040:
-                candidate_solution['investment'][node_id][year]['s'] = 1.00
-                candidate_solution['investment'][node_id][year]['e'] = 1.00
+                candidate_solution['investment'][node_id][year]['s'] = 0.00
+                candidate_solution['investment'][node_id][year]['e'] = 0.00
             candidate_solution['total_capacity'][node_id][year] = dict()
             candidate_solution['total_capacity'][node_id][year]['s'] = 1.00
             candidate_solution['total_capacity'][node_id][year]['e'] = 1.00
