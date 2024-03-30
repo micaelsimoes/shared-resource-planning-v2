@@ -432,6 +432,7 @@ def _build_model(network, params):
     model.shared_es_s_slack_down = pe.Var(model.shared_energy_storages, domain=pe.NonNegativeReals)           # (...)
     model.shared_es_e_slack_up = pe.Var(model.shared_energy_storages, domain=pe.NonNegativeReals)
     model.shared_es_e_slack_down = pe.Var(model.shared_energy_storages, domain=pe.NonNegativeReals)
+
     model.shared_es_soc = pe.Var(model.shared_energy_storages, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals)
     model.shared_es_pch = pe.Var(model.shared_energy_storages, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals, initialize=0.0)
     model.shared_es_pdch = pe.Var(model.shared_energy_storages, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals, initialize=0.0)
