@@ -17,7 +17,7 @@
 	"node_balance_relax": true,
 	"branch_current_relax": true,
 	"interface_pf_relax": true,
-	"interface_ess_relax": true,
+	"interface_ess_relax": false,
 	"solver": {
 		"name": "ipopt",
 		"linear_solver": "ma57",
