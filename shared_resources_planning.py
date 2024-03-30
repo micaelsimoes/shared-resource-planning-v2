@@ -688,8 +688,8 @@ def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
 
     # Active and Reactive power requested by TSO and DSOs
     model.p_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)             # Active power - TSO
-    model.p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)               # Active power - previous iteration value
-    #model.dual_p_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)            # Dual variables - TSO - active power
+    #model.p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)               # Active power - previous iteration value
+    model.dual_p_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)            # Dual variables - TSO - active power
     #model.dual_p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)              # Dual variables - previous iteration value
 
     # Objective function - augmented Lagrangian
