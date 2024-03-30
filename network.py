@@ -1140,8 +1140,8 @@ def _build_model(network, params):
                     obj += PENALTY_INTERFACE_ESS * (model.penalty_expected_shared_ess_p_up[p] + model.penalty_expected_shared_ess_p_down[p])
 
         for e in model.shared_energy_storages:
-            obj += PENALTY_ESS_SLACK * 1e3 * (model.shared_es_s_slack_up[e] + model.shared_es_s_slack_down[e])
-            obj += PENALTY_ESS_SLACK * 1e3 * (model.shared_es_e_slack_up[e] + model.shared_es_e_slack_down[e])
+            obj += PENALTY_ESS_SLACK**2 * (model.shared_es_s_slack_up[e] + model.shared_es_s_slack_down[e])
+            obj += PENALTY_ESS_SLACK**2 * (model.shared_es_e_slack_up[e] + model.shared_es_e_slack_down[e])
 
         model.objective = pe.Objective(sense=pe.minimize, expr=obj)
     else:
