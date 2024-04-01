@@ -1864,16 +1864,11 @@ def _process_results(network, model, params, results=dict()):
                 processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['soc'][node_id] = []
                 processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['soc_percent'][node_id] = []
                 for p in model.periods:
-                    if not isclose(capacity, 0.0, abs_tol=1e-3):
-                        p_ess = pe.value(model.shared_es_pch[e, s_m, s_o, p] - model.shared_es_pdch[e, s_m, s_o, p]) * network.baseMVA
-                        soc_ess = pe.value(model.shared_es_soc[e, s_m, s_o, p]) * network.baseMVA
-                        processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['p'][node_id].append(p_ess)
-                        processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['soc'][node_id].append(soc_ess)
-                        processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['soc_percent'][node_id].append(soc_ess / capacity)
-                    else:
-                        processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['p'][node_id].append('N/A')
-                        processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['soc'][node_id].append('N/A')
-                        processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['soc_percent'][node_id].append('N/A')
+                    p_ess = pe.value(model.shared_es_pch[e, s_m, s_o, p] - model.shared_es_pdch[e, s_m, s_o, p]) * network.baseMVA
+                    soc_ess = pe.value(model.shared_es_soc[e, s_m, s_o, p]) * network.baseMVA
+                    processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['p'][node_id].append(p_ess)
+                    processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['soc'][node_id].append(soc_ess)
+                    processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['soc_percent'][node_id].append(soc_ess / capacity)
 
             # Slack variable penalties
             if params.slacks_used:
