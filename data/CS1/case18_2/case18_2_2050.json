@@ -29,7 +29,7 @@
 		{"gen_id":3,"bus":22,"Pmax":2.50,"Pmin":0,"Qmax":0,"Qmin":0,"Vg":1.05,"status":1, "type": "PV"}
 	],
 	"line": [
-		{"branch_id": 1, "fbus": 1, "tbus": 2, "r": 0.00431, "x": 0.01204, "b": 0.000035, "rating": 12, "status": 1},
+		{"branch_id": 1, "fbus": 1, "tbus": 2, "r": 0.00431, "x": 0.01204, "b": 0.000035, "rating": 15, "status": 1},
 		{"branch_id": 2, "fbus": 2, "tbus": 3, "r": 0.00601, "x": 0.01677, "b": 0.000049, "rating": 12, "status": 1},
 		{"branch_id": 3, "fbus": 3, "tbus": 4, "r": 0.00316, "x": 0.00882, "b": 0.000026, "rating": 12, "status": 1},
 		{"branch_id": 4, "fbus": 4, "tbus": 5, "r": 0.00896, "x": 0.02502, "b": 0.000073, "rating": 10, "status": 1},
