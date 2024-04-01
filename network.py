@@ -1860,6 +1860,8 @@ def _process_results(network, model, params, results=dict()):
             for e in model.shared_energy_storages:
                 node_id = network.shared_energy_storages[e].bus
                 capacity = network.shared_energy_storages[e].e * network.baseMVA
+                if isclose(capacity, 0.0, abs_tol=1e-6):
+                    capacity = 1.00
                 processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['p'][node_id] = []
                 processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['soc'][node_id] = []
                 processed_results['scenarios'][s_m][s_o]['shared_energy_storages']['soc_percent'][node_id] = []
