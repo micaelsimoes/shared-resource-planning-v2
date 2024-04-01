@@ -1134,7 +1134,7 @@ def _build_model(network, params):
                     obj += PENALTY_INTERFACE_POWER_FLOW * (model.penalty_expected_interface_pf_p_up[p] + model.penalty_expected_interface_pf_p_down[p])
                     obj += PENALTY_INTERFACE_POWER_FLOW * (model.penalty_expected_interface_pf_q_up[p] + model.penalty_expected_interface_pf_q_down[p])
                 if params.interface_ess_relax:
-                    obj += PENALTY_INTERFACE_ESS * 1e6 * (model.penalty_expected_shared_ess_p_up[p] + model.penalty_expected_shared_ess_p_down[p])
+                    obj += PENALTY_INTERFACE_ESS * (model.penalty_expected_shared_ess_p_up[p] + model.penalty_expected_shared_ess_p_down[p])
 
         for e in model.shared_energy_storages:
             obj += PENALTY_ESS_SLACK * (model.shared_es_s_slack_up[e] + model.shared_es_s_slack_down[e])
