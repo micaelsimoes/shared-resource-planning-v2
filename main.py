@@ -66,9 +66,7 @@ def shared_resources_planning(working_directory, specification_filename):
     planning_problem.run_operational_planning(candidate_solution=candidate_solution, print_results=True, debug_flag=True)
     '''
 
-    '''
     candidate_solution = planning_problem.get_initial_candidate_solution()
-    '''
 
     '''
     transmission_network = planning_problem.transmission_network
