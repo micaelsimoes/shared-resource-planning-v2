@@ -86,6 +86,6 @@
 		{"branch_id": 38, "fbus": 27, "tbus": 30, "r": 0.32, "x": 0.6, "b": 0, "rating": 16, "status": 1},
 		{"branch_id": 39, "fbus": 29, "tbus": 30, "r": 0.24, "x": 0.45, "b": 0, "rating": 16, "status": 1},
 		{"branch_id": 40, "fbus": 8, "tbus": 28, "r": 0.06, "x": 0.2, "b": 0.02, "rating": 32, "status": 1},
-		{"branch_id": 41, "fbus": 6, "tbus": 28, "r": 0.02, "x": 0.06, "b": 0.01, "rating": 32, "status": 1}
+		{"branch_id": 41, "fbus": 6, "tbus": 28, "r": 0.02, "x": 0.06, "b": 0.01, "rating": 64, "status": 1}
 	]
 }
