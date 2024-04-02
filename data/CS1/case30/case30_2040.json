@@ -55,7 +55,7 @@
 		{"branch_id": 7, "fbus": 4, "tbus": 6, "r": 0.01, "x": 0.04, "b": 0, "rating": 90, "status": 1},
 		{"branch_id": 8, "fbus": 5, "tbus": 7, "r": 0.05, "x": 0.12, "b": 0.01, "rating": 70, "status": 1},
 		{"branch_id": 9, "fbus": 6, "tbus": 7, "r": 0.03, "x": 0.08, "b": 0.01, "rating": 130, "status": 1},
-		{"branch_id": 10, "fbus": 6, "tbus": 8, "r": 0.01, "x": 0.04, "b": 0, "rating": 65, "status": 1},
+		{"branch_id": 10, "fbus": 6, "tbus": 8, "r": 0.01, "x": 0.04, "b": 0, "rating": 32, "status": 1},
 		{"branch_id": 11, "fbus": 6, "tbus": 9, "r": 0, "x": 0.21, "b": 0, "rating": 65, "status": 1},
 		{"branch_id": 12, "fbus": 6, "tbus": 10, "r": 0, "x": 0.56, "b": 0, "rating": 32, "status": 1},
 		{"branch_id": 13, "fbus": 9, "tbus": 11, "r": 0, "x": 0.21, "b": 0, "rating": 65, "status": 1},
@@ -85,7 +85,9 @@
 		{"branch_id": 37, "fbus": 27, "tbus": 29, "r": 0.22, "x": 0.42, "b": 0, "rating": 32, "status": 1},
 		{"branch_id": 38, "fbus": 27, "tbus": 30, "r": 0.32, "x": 0.6, "b": 0, "rating": 16, "status": 1},
 		{"branch_id": 39, "fbus": 29, "tbus": 30, "r": 0.24, "x": 0.45, "b": 0, "rating": 16, "status": 1},
-		{"branch_id": 40, "fbus": 8, "tbus": 28, "r": 0.06, "x": 0.2, "b": 0.02, "rating": 32, "status": 1},
-		{"branch_id": 41, "fbus": 6, "tbus": 28, "r": 0.02, "x": 0.06, "b": 0.01, "rating": 64, "status": 1}
+		{"branch_id": 40, "fbus": 8, "tbus": 28, "r": 0.06, "x": 0.2, "b": 0.02, "rating": 16, "status": 1},
+		{"branch_id": 41, "fbus": 6, "tbus": 28, "r": 0.02, "x": 0.06, "b": 0.01, "rating": 64, "status": 1},
+		{"branch_id": 42, "fbus": 6, "tbus": 8, "r": 0.01, "x": 0.04, "b": 0, "rating": 32, "status": 1},
+		{"branch_id": 43, "fbus": 8, "tbus": 28, "r": 0.06, "x": 0.2, "b": 0.02, "rating": 16, "status": 1}
 	]
 }
