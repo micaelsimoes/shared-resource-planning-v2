@@ -583,11 +583,12 @@ def update_transmission_model_to_admm(transmission_network, model, initial_inter
             model[year][day].dual_pf_p_req = pe.Var(model[year][day].active_distribution_networks, model[year][day].periods, domain=pe.Reals)   # Dual variable - active power requested
             model[year][day].dual_pf_q_req = pe.Var(model[year][day].active_distribution_networks, model[year][day].periods, domain=pe.Reals)   # Dual variable - reactive power requested
 
-
             model[year][day].rho_ess = pe.Var(domain=pe.NonNegativeReals)
             model[year][day].rho_ess.fix(params.rho['ess'][transmission_network.name])
-            model[year][day].p_ess_req = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)         # Shared ESS - Active power requested (DSO/ESSO)
-            model[year][day].dual_ess_p = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)        # Dual variable - Shared ESS active power
+            model[year][day].p_ess_req = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)             # Shared ESS - Active power requested (DSO/ESSO)
+            model[year][day].p_ess_prev = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)            # Shared ESS - Active power requested (DSO/ESSO)
+            model[year][day].dual_ess_p_req = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)        # Dual variable - Shared ESS active power
+            model[year][day].dual_ess_p_prev = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)       # Dual variable - Shared ESS active power
 
             # Objective function - augmented Lagrangian
             obj = model[year][day].objective.expr / abs(init_of_value)
@@ -608,9 +609,12 @@ def update_transmission_model_to_admm(transmission_network, model, initial_inter
                 if isclose(rating, 0.00, abs_tol=1e-3/s_base):
                     rating = 1.00       # Do not balance residuals
                 for p in model[year][day].periods:
-                    constraint_ess_p = (model[year][day].expected_shared_ess_p[e, p] - model[year][day].p_ess_req[e, p]) / (2 * rating)
-                    obj += model[year][day].dual_ess_p[e, p] * constraint_ess_p
-                    obj += (model[year][day].rho_ess / 2) * constraint_ess_p ** 2
+                    constraint_ess_p_req = (model[year][day].expected_shared_ess_p[e, p] - model[year][day].p_ess_req[e, p]) / (2 * rating)
+                    constraint_ess_p_prev = (model[year][day].expected_shared_ess_p[e, p] - model[year][day].p_ess_prev[e, p]) / (2 * rating)
+                    obj += model[year][day].dual_ess_p_req[e, p] * constraint_ess_p_req
+                    obj += model[year][day].dual_ess_p_prev[e, p] * constraint_ess_p_prev
+                    obj += (model[year][day].rho_ess / 2) * constraint_ess_p_req ** 2
+                    obj += (model[year][day].rho_ess / 2) * constraint_ess_p_prev ** 2
 
             model[year][day].objective.expr = obj
 
@@ -703,9 +707,9 @@ def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
 
     # Active and Reactive power requested by TSO and DSOs
     model.p_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)             # Active power - TSO
-    #model.p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)               # Active power - previous iteration value
-    model.dual_p_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)            # Dual variables - TSO - active power
-    #model.dual_p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)              # Dual variables - previous iteration value
+    model.p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)            # Active power - previous iteration value
+    model.dual_p_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)        # Dual variables - TSO - active power
+    model.dual_p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)       # Dual variables - previous iteration value
 
     # Objective function - augmented Lagrangian
     init_of_value = pe.value(model.objective)
@@ -718,11 +722,11 @@ def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
             for d in model.days:
                 for p in model.periods:
                     constraint_p_req = (model.es_expected_p[e, y, d, p] - model.p_req[e, y, d, p]) / (2 * rating_s)
-                    #constraint_p_prev = (model.es_expected_p[e, y, d, p] - model.p_prev[e, y, d, p]) / (2 * rating_s)
+                    constraint_p_prev = (model.es_expected_p[e, y, d, p] - model.p_prev[e, y, d, p]) / (2 * rating_s)
                     obj += model.dual_p_req[e, y, d, p] * (constraint_p_req)
-                    #obj += model.dual_p_prev[e, y, d, p] * (constraint_p_prev)
+                    obj += model.dual_p_prev[e, y, d, p] * (constraint_p_prev)
                     obj += (model.rho / 2) * (constraint_p_req) ** 2
-                    #obj += (model.rho / 2) * (constraint_p_prev) ** 2
+                    obj += (model.rho / 2) * (constraint_p_prev) ** 2
 
     model.objective.expr = obj
 
