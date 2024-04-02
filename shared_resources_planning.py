@@ -972,10 +972,12 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
                     error_p_dso = shared_ess_vars['dso'][node_id][year][day]['p'][t] - shared_ess_vars['tso'][node_id][year][day]['p'][p]
                     error_p_esso_tso = shared_ess_vars['esso'][node_id][year][day]['p'][p] - shared_ess_vars['tso'][node_id][year][day]['p'][t]
                     error_p_esso_dso = shared_ess_vars['esso'][node_id][year][day]['p'][p] - shared_ess_vars['dso'][node_id][year][day]['p'][t]
+                    error_p_esso_prev = shared_ess_vars['esso'][node_id][year][day]['p'][p] - shared_ess_prev_vars['esso'][node_id][year][day]['p'][t]
                     dual_vars['tso'][node_id][year][day]['p'][t] += params.rho['ess'][transmission_network.name] * (error_p_tso)
                     dual_vars['dso'][node_id][year][day]['p'][t] += params.rho['ess'][distribution_network.name] * (error_p_dso)
                     dual_vars['esso']['tso'][node_id][year][day]['p'][t] += params.rho['ess']['esso'] * (error_p_esso_tso)
                     dual_vars['esso']['dso'][node_id][year][day]['p'][t] += params.rho['ess']['esso'] * (error_p_esso_dso)
+                    dual_vars['esso']['prev'][node_id][year][day]['p'][t] += params.rho['ess']['esso'] * (error_p_esso_prev)
 
 
 def compute_primal_value(planning_problem, tso_model, dso_models, esso_model):
