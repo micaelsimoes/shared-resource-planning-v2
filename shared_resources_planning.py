@@ -666,6 +666,8 @@ def update_distribution_models_to_admm(distribution_networks, models, initial_in
                 dso_model[year][day].rho_ess.fix(params.rho['ess'][distribution_network.network[year][day].name])
                 dso_model[year][day].p_ess_req = pe.Var(dso_model[year][day].periods, domain=pe.Reals)      # Shared ESS - active power requested (TSO/ESSO)
                 dso_model[year][day].dual_ess_p = pe.Var(dso_model[year][day].periods, domain=pe.Reals)     # Dual variable - Shared ESS active power
+                dso_model[year][day].p_ess_prev = pe.Var(dso_model[year][day].periods, domain=pe.Reals)     # Shared ESS - previous iteration value
+                dso_model[year][day].dual_ess_prev = pe.Var(dso_model[year][day].periods, domain=pe.Reals)  # Dual variable - previous iteration value
 
                 # Objective function - augmented Lagrangian
                 obj = dso_model[year][day].objective.expr / max(abs(init_of_value), 1.00)
@@ -684,8 +686,11 @@ def update_distribution_models_to_admm(distribution_networks, models, initial_in
                 # Augmented Lagrangian -- Shared ESS (residual balancing)
                 for p in dso_model[year][day].periods:
                     constraint_ess_p = (dso_model[year][day].expected_shared_ess_p[p] - dso_model[year][day].p_ess_req[p]) / (2 * rating)
+                    constraint_ess_p_prev = (dso_model[year][day].expected_shared_ess_p[p] - dso_model[year][day].p_ess_prev[p]) / (2 * rating)
                     obj += dso_model[year][day].dual_ess_p[p] * (constraint_ess_p)
+                    obj += dso_model[year][day].dual_ess_prev[p] * (constraint_ess_p_prev)
                     obj += (dso_model[year][day].rho_ess / 2) * (constraint_ess_p) ** 2
+                    obj += (dso_model[year][day].rho_ess / 2) * (constraint_ess_prev) ** 2
 
                 dso_model[year][day].objective.expr = obj
 
