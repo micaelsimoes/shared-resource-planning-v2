@@ -236,7 +236,7 @@ def _run_operational_planning(planning_problem, candidate_solution, debug_flag=F
         # 2. Solve TSO problem
         results['tso'] = update_transmission_coordination_model_and_solve(transmission_network, tso_model,
                                                                           consensus_vars['interface']['pf']['dso'], dual_vars['pf']['tso'],
-                                                                          consensus_vars['ess']['esso'], dual_vars['ess']['tso'],
+                                                                          consensus_vars['ess']['dso'], dual_vars['ess']['tso'],
                                                                           admm_parameters, from_warm_start=from_warm_start)
 
         # 2.1 Update ADMM CONSENSUS variables
@@ -268,7 +268,7 @@ def _run_operational_planning(planning_problem, candidate_solution, debug_flag=F
         results['dso'] = update_distribution_coordination_models_and_solve(distribution_networks, dso_models,
                                                                            consensus_vars['interface']['v'],
                                                                            consensus_vars['interface']['pf']['tso'], dual_vars['pf']['dso'],
-                                                                           consensus_vars['ess']['esso'], dual_vars['ess']['dso'],
+                                                                           consensus_vars['ess']['tso'], dual_vars['ess']['dso'],
                                                                            admm_parameters, from_warm_start=from_warm_start)
 
         # 3.1 Update ADMM CONSENSUS variables
