@@ -785,7 +785,6 @@ def update_distribution_coordination_models_and_solve(distribution_networks, mod
             for day in distribution_network.days:
 
                 s_base = distribution_network.network[year][day].baseMVA
-                ref_node_id = distribution_network.network[year][day].get_reference_node_id()
 
                 rho_pf = params.rho['pf'][distribution_network.name]
                 rho_ess = params.rho['ess'][distribution_network.name]
