@@ -237,6 +237,7 @@ def _run_operational_planning(planning_problem, candidate_solution, debug_flag=F
         results['tso'] = update_transmission_coordination_model_and_solve(transmission_network, tso_model,
                                                                           consensus_vars['interface']['pf']['dso'], dual_vars['pf']['tso'],
                                                                           consensus_vars['ess']['esso'], dual_vars['ess']['tso'],
+                                                                          consensus_vars_prev_iter['tso'],
                                                                           admm_parameters, from_warm_start=from_warm_start)
 
         # 2.1 Update ADMM CONSENSUS variables
@@ -359,7 +360,13 @@ def create_admm_variables(planning_problem):
 
     dual_variables = {
         'pf': {'tso': dict(), 'dso': dict()},
-        'ess': {'tso': dict(), 'dso': dict(), 'esso': {'tso': dict(), 'dso': dict(), 'prev': dict()}}
+        'ess': {'tso': dict(),
+                'dso': dict(),
+                'esso': {'tso': dict(),
+                         'dso': dict()},
+                'prev': {'tso': dict(),
+                         'dso': dict(),
+                         'esso': dict()}}
     }
 
     consensus_variables_prev_iter = {
@@ -384,7 +391,9 @@ def create_admm_variables(planning_problem):
         dual_variables['ess']['dso'][node_id] = dict()
         dual_variables['ess']['esso']['tso'][node_id] = dict()
         dual_variables['ess']['esso']['dso'][node_id] = dict()
-        dual_variables['ess']['esso']['prev'][node_id] = dict()
+        dual_variables['ess']['prev']['tso'][node_id] = dict()
+        dual_variables['ess']['prev']['dso'][node_id] = dict()
+        dual_variables['ess']['prev']['esso'][node_id] = dict()
 
         consensus_variables_prev_iter['interface']['pf']['tso'][node_id] = dict()
         consensus_variables_prev_iter['interface']['pf']['dso'][node_id] = dict()
@@ -407,7 +416,9 @@ def create_admm_variables(planning_problem):
             dual_variables['ess']['dso'][node_id][year] = dict()
             dual_variables['ess']['esso']['tso'][node_id][year] = dict()
             dual_variables['ess']['esso']['dso'][node_id][year] = dict()
-            dual_variables['ess']['esso']['prev'][node_id][year] = dict()
+            dual_variables['ess']['prev']['tso'][node_id][year] = dict()
+            dual_variables['ess']['prev']['dso'][node_id][year] = dict()
+            dual_variables['ess']['prev']['esso'][node_id][year] = dict()
 
             consensus_variables_prev_iter['interface']['pf']['tso'][node_id][year] = dict()
             consensus_variables_prev_iter['interface']['pf']['dso'][node_id][year] = dict()
@@ -430,7 +441,9 @@ def create_admm_variables(planning_problem):
                 dual_variables['ess']['dso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
                 dual_variables['ess']['esso']['tso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
                 dual_variables['ess']['esso']['dso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
-                dual_variables['ess']['esso']['prev'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
+                dual_variables['ess']['prev']['tso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
+                dual_variables['ess']['prev']['dso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
+                dual_variables['ess']['prev']['esso'][node_id][year][day] = {'p': [0.0] * planning_problem.num_instants, 'q': [0.0] * num_instants}
 
                 consensus_variables_prev_iter['interface']['pf']['tso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
                 consensus_variables_prev_iter['interface']['pf']['dso'][node_id][year][day] = {'p': [0.0] * num_instants, 'q': [0.0] * num_instants}
@@ -733,7 +746,7 @@ def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
     return model
 
 
-def update_transmission_coordination_model_and_solve(transmission_network, model, pf_req, dual_pf, ess_req, dual_ess, params, from_warm_start=False):
+def update_transmission_coordination_model_and_solve(transmission_network, model, pf_req, dual_pf, ess_req, dual_ess, ess_prev, params, from_warm_start=False):
 
     print('[INFO] \t\t - Updating transmission network...')
 
@@ -766,8 +779,10 @@ def update_transmission_coordination_model_and_solve(transmission_network, model
                 # Update shared ESS capacity and power requests
                 shared_ess_idx = transmission_network.network[year][day].get_shared_energy_storage_idx(node_id)
                 for p in model[year][day].periods:
-                    model[year][day].dual_ess_p[shared_ess_idx, p].fix(dual_ess[node_id][year][day]['p'][p] / s_base)
+                    model[year][day].dual_ess_p_req[shared_ess_idx, p].fix(dual_ess[node_id][year][day]['p'][p] / s_base)
+                    model[year][day].dual_ess_p_prev[shared_ess_idx, p].fix(dual_ess[node_id][year][day]['p'][p] / s_base)
                     model[year][day].p_ess_req[shared_ess_idx, p].fix(ess_req[node_id][year][day]['p'][p] / s_base)
+                    model[year][day].p_ess_prev[shared_ess_idx, p].fix(ess_req[node_id][year][day]['p'][p] / s_base)
 
     # Solve!
     res = transmission_network.optimize(model, from_warm_start=from_warm_start)
