@@ -1173,9 +1173,6 @@ def _run_operational_planning_without_coordination(planning_problem):
 
     results['tso'] = transmission_network.optimize(tso_model)
 
-    # Write results to xlsx file
-    planning_problem.write_operational_planning_results_without_coordination_to_excel(tso_model, dso_models, results)
-
     models = {'tso': tso_model, 'dso': dso_models}
 
     return results, models
