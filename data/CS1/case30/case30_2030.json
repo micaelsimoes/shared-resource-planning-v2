@@ -78,7 +78,7 @@
 		{"branch_id": 30, "fbus": 15, "tbus": 23, "r": 0.1, "x": 0.2, "b": 0, "rating": 32, "status": 1},
 		{"branch_id": 31, "fbus": 22, "tbus": 24, "r": 0.12, "x": 0.18, "b": 0, "rating": 64, "status": 1},
 		{"branch_id": 32, "fbus": 23, "tbus": 24, "r": 0.13, "x": 0.27, "b": 0, "rating": 32, "status": 1},
-		{"branch_id": 33, "fbus": 24, "tbus": 25, "r": 0.19, "x": 0.33, "b": 0, "rating": 32, "status": 1},
+		{"branch_id": 33, "fbus": 24, "tbus": 25, "r": 0.19, "x": 0.33, "b": 0, "rating": 48, "status": 1},
 		{"branch_id": 34, "fbus": 25, "tbus": 26, "r": 0.25, "x": 0.38, "b": 0, "rating": 24, "status": 1},
 		{"branch_id": 35, "fbus": 25, "tbus": 27, "r": 0.11, "x": 0.21, "b": 0, "rating": 48, "status": 1},
 		{"branch_id": 36, "fbus": 28, "tbus": 27, "r": 0, "x": 0.4, "b": 0, "rating": 65, "status": 1},
