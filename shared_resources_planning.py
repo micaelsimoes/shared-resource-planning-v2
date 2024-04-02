@@ -72,7 +72,7 @@ class SharedResourcesPlanning:
         print('[INFO] Running PLANNING PROBLEM WITHOUT COORDINATION...')
         results, models = _run_operational_planning_without_coordination(self)
         if print_results:
-            self.write_operational_planning_results_to_excel(models, results)
+            self.write_operational_planning_results_without_coordination_to_excel(models, results)
 
     def update_admm_consensus_variables(self, tso_model, dso_models, esso_model, consensus_vars, dual_vars, consensus_vars_prev_iter, params):
         _update_admm_consensus_variables(self, tso_model, dso_models, esso_model, consensus_vars, dual_vars, consensus_vars_prev_iter, params)
@@ -85,6 +85,11 @@ class SharedResourcesPlanning:
         processed_results = _process_operational_planning_results(self, optimization_models['tso'], optimization_models['dso'], optimization_models['esso'], results)
         shared_ess_capacity = self.shared_ess_data.get_investment_and_available_capacities(optimization_models['esso'])
         _write_operational_planning_results_to_excel(self, processed_results, primal_evolution=primal_evolution, shared_ess_capacity=shared_ess_capacity, filename=filename)
+        
+    def write_operational_planning_results_without_coordination_to_excel(self, optimization_models, results):
+        filename = os.path.join(self.results_dir, self.name + '_operational_planning_results_no_coordination.xlsx')
+        processed_results = _process_operational_planning_results_no_coordination(self, optimization_models['tso'], optimization_models['dso'], results)
+        _write_operational_planning_results_no_coordination_to_excel(self, processed_results, filename)
 
     def plot_diagram(self):
         _plot_networkx_diagram(self)
@@ -1478,6 +1483,24 @@ def _process_results_interface_power_flow(planning_problem, tso_model, dso_model
     return processed_results
 
 
+def _process_operational_planning_results_no_coordination(planning_problem, tso_model, dso_models, optimization_results):
+
+    transmission_network = planning_problem.transmission_network
+    distribution_networks = planning_problem.distribution_networks
+
+    processed_results = dict()
+    processed_results['tso'] = dict()
+    processed_results['dso'] = dict()
+
+    processed_results['tso'] = transmission_network.process_results(tso_model, optimization_results['tso'])
+    for node_id in distribution_networks:
+        dso_model = dso_models[node_id]
+        distribution_network = distribution_networks[node_id]
+        processed_results['dso'][node_id] = distribution_network.process_results(dso_model, optimization_results['dso'][node_id])
+
+    return processed_results
+
+
 # ======================================================================================================================
 #  RESULTS OPERATIONAL PLANNING - write functions
 # ======================================================================================================================
@@ -1499,6 +1522,35 @@ def _write_operational_planning_results_to_excel(planning_problem, results, prim
 
     # Shared Energy Storages results
     _write_shared_energy_storages_results_to_excel(planning_problem, wb, results)
+
+    #  TSO and DSOs' results
+    _write_network_voltage_results_to_excel(planning_problem, wb, results)
+    _write_network_consumption_results_to_excel(planning_problem, wb, results)
+    _write_network_generation_results_to_excel(planning_problem, wb, results)
+    _write_network_branch_results_to_excel(planning_problem, wb, results, 'losses')
+    _write_network_branch_results_to_excel(planning_problem, wb, results, 'ratio')
+    _write_network_branch_results_to_excel(planning_problem, wb, results, 'current_perc')
+    _write_network_branch_power_flow_results_to_excel(planning_problem, wb, results)
+    _write_network_energy_storages_results_to_excel(planning_problem, wb, results)
+    _write_relaxation_slacks_results_to_excel(planning_problem, wb, results)
+
+    # Save results
+    try:
+        wb.save(filename)
+    except:
+        from datetime import datetime
+        now = datetime.now()
+        current_time = now.strftime("%Y-%m-%d_%H-%M-%S")
+        backup_filename = f"{filename.replace('.xlsx', '')}_{current_time}.xlsx"
+        print(f"[WARNING] Results saved to file {backup_filename}.xlsx")
+        wb.save(backup_filename)
+
+
+def _write_operational_planning_results_no_coordination_to_excel(planning_problem, results, filename='operation_planning_results_no_coordination'):
+
+    wb = Workbook()
+
+    _write_operational_planning_main_info_to_excel(planning_problem, wb, results)
 
     #  TSO and DSOs' results
     _write_network_voltage_results_to_excel(planning_problem, wb, results)
