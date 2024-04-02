@@ -77,11 +77,6 @@ def shared_resources_planning(working_directory, specification_filename):
         distribution_network = distribution_networks[node_id]
         distribution_network.update_data_with_candidate_solution(candidate_solution['total_capacity'])
         dn_model = distribution_network.build_model()
-        for year in distribution_network.years:
-            for day in distribution_network.days:
-                dn_model[year][day].expected_shared_ess_p.pprint()
-                dn_model[year][day].shared_es_s_rated_fixed.pprint()
-                dn_model[year][day].shared_es_e_rated_fixed.pprint()
         results = distribution_network.optimize(dn_model)
         processed_results = distribution_network.process_results(dn_model, results)
         distribution_network.write_optimization_results_to_excel(processed_results)
