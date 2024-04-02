@@ -663,8 +663,8 @@ def update_distribution_models_to_admm(distribution_networks, models, initial_in
 
                 dso_model[year][day].rho_ess = pe.Var(domain=pe.NonNegativeReals)
                 dso_model[year][day].rho_ess.fix(params.rho['ess'][distribution_network.network[year][day].name])
-                dso_model[year][day].dual_ess_p = pe.Var(dso_model[year][day].periods, domain=pe.Reals)     # Dual variable - Shared ESS active power
                 dso_model[year][day].p_ess_req = pe.Var(dso_model[year][day].periods, domain=pe.Reals)      # Shared ESS - active power requested (TSO/ESSO)
+                dso_model[year][day].dual_ess_p = pe.Var(dso_model[year][day].periods, domain=pe.Reals)     # Dual variable - Shared ESS active power
 
                 # Objective function - augmented Lagrangian
                 obj = dso_model[year][day].objective.expr / max(abs(init_of_value), 1.00)

@@ -954,6 +954,7 @@ def _process_results(shared_ess_data, model):
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['soc_percent'][node_id] = ['N/A' for _ in model.periods]
 
                     for e in model.energy_storages:
+
                         node_id = shared_ess_data.shared_energy_storages[year][e].bus
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['slack_s_up'][node_id] = pe.value(model.slack_s_up[e, y])
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['slack_s_down'][node_id] = pe.value(model.slack_s_down[e, y])
