@@ -237,7 +237,7 @@ def _run_operational_planning(planning_problem, candidate_solution, debug_flag=F
         results['tso'] = update_transmission_coordination_model_and_solve(transmission_network, tso_model,
                                                                           consensus_vars['interface']['pf']['dso'], dual_vars['pf']['tso'],
                                                                           consensus_vars['ess']['esso'], dual_vars['ess']['tso'],
-                                                                          consensus_vars_prev_iter['tso'],
+                                                                          consensus_vars_prev_iter['ess']['tso'],
                                                                           admm_parameters, from_warm_start=from_warm_start)
 
         # 2.1 Update ADMM CONSENSUS variables
