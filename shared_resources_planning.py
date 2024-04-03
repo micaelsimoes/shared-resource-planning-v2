@@ -696,7 +696,7 @@ def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
     model.rho.fix(params.rho['ess']['esso'])
 
     # Active and Reactive power requested by TSO and DSOs
-    model.p_req_transm = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)             # Active power - TSO & DSO
+    model.p_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)             # Active power - TSO & DSO
     model.p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)           # Active power - previous iteration value
     model.dual_p_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)        # Dual variables - TSO & DSO
     model.dual_p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)      # Dual variables - previous iteration value
