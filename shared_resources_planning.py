@@ -937,11 +937,12 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
         for y in sess_model.years:
             year = repr_years[y]
             shared_ess_idx = shared_ess_data.get_shared_energy_storage_idx(node_id)
+            capacity = pe.value(sess_model.es_s_rated[shared_ess_idx, y])
             for d in sess_model.days:
                 day = repr_days[d]
                 shared_ess_vars['esso'][node_id][year][day]['p'] = [0.0 for _ in range(planning_problem.num_instants)]
                 for p in sess_model.periods:
-                    shared_ess_vars['esso'][node_id][year][day]['p'][p] = pe.value(sess_model.es_expected_p[shared_ess_idx, y, d, p])
+                    shared_ess_vars['esso'][node_id][year][day]['p'][p] = max(min(pe.value(sess_model.es_expected_p[shared_ess_idx, y, d, p]), capacity), 0.00)
 
         # Shared Energy Storage - Power requested by TSO
         for y in range(len(repr_years)):
@@ -950,9 +951,10 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
                 day = repr_days[d]
                 s_base = transmission_network.network[year][day].baseMVA
                 shared_ess_idx = transmission_network.network[year][day].get_shared_energy_storage_idx(node_id)
+                capacity = pe.value(tso_model[year][day].shared_es_s_rated[shared_ess_idx]) * s_base
                 shared_ess_vars['tso'][node_id][year][day]['p'] = [0.0 for _ in range(planning_problem.num_instants)]
                 for p in tso_model[year][day].periods:
-                    shared_ess_vars['tso'][node_id][year][day]['p'][p] = pe.value(tso_model[year][day].expected_shared_ess_p[shared_ess_idx, p]) * s_base
+                    shared_ess_vars['tso'][node_id][year][day]['p'][p] = max(min(pe.value(tso_model[year][day].expected_shared_ess_p[shared_ess_idx, p]), capacity), 0.00) * s_base
 
         # Shared Energy Storage - Power requested by DSO
         for y in range(len(repr_years)):
@@ -960,9 +962,11 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
             for d in range(len(repr_days)):
                 day = repr_days[d]
                 s_base = distribution_network.network[year][day].baseMVA
+                shared_ess_idx = distribution_network.network[year][day].get_shared_energy_storage_idx(node_id)
+                capacity = pe.value(dso_model[year][day].shared_es_s_rated[shared_ess_idx]) * s_base
                 shared_ess_vars['dso'][node_id][year][day]['p'] = [0.0 for _ in range(planning_problem.num_instants)]
                 for p in dso_model[year][day].periods:
-                    shared_ess_vars['dso'][node_id][year][day]['p'][p] = pe.value(dso_model[year][day].expected_shared_ess_p[p]) * s_base
+                    shared_ess_vars['dso'][node_id][year][day]['p'][p] = max(min(pe.value(dso_model[year][day].expected_shared_ess_p[p]), capacity), 0.00) * s_base
 
         # Update dual variables Shared ESS
         for year in planning_problem.years:
