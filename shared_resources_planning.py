@@ -594,9 +594,9 @@ def update_transmission_model_to_admm(transmission_network, model, initial_inter
             model[year][day].rho_ess = pe.Var(domain=pe.NonNegativeReals)
             model[year][day].rho_ess.fix(params.rho['ess'][transmission_network.name])
             model[year][day].p_ess_req = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)         # Shared ESS - Active power requested (DSO/ESSO)
-            model[year][day].p_ess_prev = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)         # Shared ESS - Active power - previous iteration
+            #model[year][day].p_ess_prev = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)         # Shared ESS - Active power - previous iteration
             model[year][day].dual_ess_p_req = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)        # Dual variable - Shared ESS active power
-            model[year][day].dual_ess_p_prev = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)        # Dual variable - Shared ESS active power - previous iteration
+            #model[year][day].dual_ess_p_prev = pe.Var(model[year][day].shared_energy_storages, model[year][day].periods, domain=pe.Reals)        # Dual variable - Shared ESS active power - previous iteration
 
             # Objective function - augmented Lagrangian
             obj = model[year][day].objective.expr / abs(init_of_value)
@@ -618,11 +618,11 @@ def update_transmission_model_to_admm(transmission_network, model, initial_inter
                     rating = 1.00       # Do not balance residuals
                 for p in model[year][day].periods:
                     constraint_ess_p = (model[year][day].expected_shared_ess_p[e, p] - model[year][day].p_ess_req[e, p]) / (2 * rating)
-                    constraint_ess_p_prev = (model[year][day].expected_shared_ess_p[e, p] - model[year][day].p_ess_prev[e, p]) / (2 * rating)
+                    #constraint_ess_p_prev = (model[year][day].expected_shared_ess_p[e, p] - model[year][day].p_ess_prev[e, p]) / (2 * rating)
                     obj += model[year][day].dual_ess_p_req[e, p] * constraint_ess_p
-                    obj += model[year][day].dual_ess_p_prev[e, p] * constraint_ess_p_prev
+                    #obj += model[year][day].dual_ess_p_prev[e, p] * constraint_ess_p_prev
                     obj += (model[year][day].rho_ess / 2) * constraint_ess_p ** 2
-                    obj += (model[year][day].rho_ess / 2) * constraint_ess_p_prev ** 2
+                    #obj += (model[year][day].rho_ess / 2) * constraint_ess_p_prev ** 2
 
             model[year][day].objective.expr = obj
 
@@ -775,9 +775,9 @@ def update_transmission_coordination_model_and_solve(transmission_network, model
                 shared_ess_idx = transmission_network.network[year][day].get_shared_energy_storage_idx(node_id)
                 for p in model[year][day].periods:
                     model[year][day].dual_ess_p_req[shared_ess_idx, p].fix(dual_ess['current'][node_id][year][day]['p'][p] / s_base)
-                    model[year][day].dual_ess_p_prev[shared_ess_idx, p].fix(dual_ess['prev'][node_id][year][day]['p'][p] / s_base)
+                    #model[year][day].dual_ess_p_prev[shared_ess_idx, p].fix(dual_ess['prev'][node_id][year][day]['p'][p] / s_base)
                     model[year][day].p_ess_req[shared_ess_idx, p].fix(ess_req[node_id][year][day]['p'][p] / s_base)
-                    model[year][day].p_ess_prev[shared_ess_idx, p].fix(ess_prev[node_id][year][day]['p'][p] / s_base)
+                    #model[year][day].p_ess_prev[shared_ess_idx, p].fix(ess_prev[node_id][year][day]['p'][p] / s_base)
 
     # Solve!
     res = transmission_network.optimize(model, from_warm_start=from_warm_start)
