@@ -236,7 +236,7 @@ def _run_operational_planning(planning_problem, candidate_solution, debug_flag=F
         # 2. Solve TSO problem
         results['tso'] = update_transmission_coordination_model_and_solve(transmission_network, tso_model,
                                                                           consensus_vars['interface']['pf']['dso'], dual_vars['pf']['tso'],
-                                                                          consensus_vars['ess']['esso'], dual_vars['ess']['tso'],
+                                                                          consensus_vars['ess']['dso'], dual_vars['ess']['tso'],
                                                                           admm_parameters, from_warm_start=from_warm_start)
 
         # 2.1 Update ADMM CONSENSUS variables
@@ -268,7 +268,7 @@ def _run_operational_planning(planning_problem, candidate_solution, debug_flag=F
         results['dso'] = update_distribution_coordination_models_and_solve(distribution_networks, dso_models,
                                                                            consensus_vars['interface']['v'],
                                                                            consensus_vars['interface']['pf']['tso'], dual_vars['pf']['dso'],
-                                                                           consensus_vars['ess']['esso'], dual_vars['ess']['dso'],
+                                                                           consensus_vars['ess']['tso'], dual_vars['ess']['dso'],
                                                                            admm_parameters, from_warm_start=from_warm_start)
 
         # 3.1 Update ADMM CONSENSUS variables
@@ -696,12 +696,10 @@ def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
     model.rho.fix(params.rho['ess']['esso'])
 
     # Active and Reactive power requested by TSO and DSOs
-    model.p_req_transm = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)             # Active power - TSO
-    model.p_req_distr = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)              # Active power - DSOs
-    #model.p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)                  # Active power - previous iteration value
-    model.dual_p_req_transm = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)        # Dual variables - TSO - active power
-    model.dual_p_req_distr = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)         # Dual variables - DSOs - active power
-    #model.dual_p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)             # Dual variables - previous iteration value
+    model.p_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)             # Active power - TSO & DSO
+    #model.p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)           # Active power - previous iteration value
+    model.dual_p_req = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)        # Dual variables - TSO & DSO
+    #model.dual_p_prev = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals)      # Dual variables - previous iteration value
 
     # Objective function - augmented Lagrangian
     init_of_value = pe.value(model.objective)
@@ -713,14 +711,11 @@ def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
                 rating_s = 1.00     # Do not balance residuals
             for d in model.days:
                 for p in model.periods:
-                    constraint_p_req_transm = (model.es_expected_p[e, y, d, p] - model.p_req_transm[e, y, d, p]) / (2 * rating_s)
-                    constraint_p_req_distr = (model.es_expected_p[e, y, d, p] - model.p_req_distr[e, y, d, p]) / (2 * rating_s)
+                    constraint_p_req = (model.es_expected_p[e, y, d, p] - model.p_req[e, y, d, p]) / (2 * rating_s)
                     #constraint_p_prev = (model.es_expected_p[e, y, d, p] - model.p_prev[e, y, d, p]) / (2 * rating_s)
-                    obj += model.dual_p_req_transm[e, y, d, p] * (constraint_p_req_transm)
-                    obj += model.dual_p_req_distr[e, y, d, p] * (constraint_p_req_distr)
+                    obj += model.dual_p_req[e, y, d, p] * (constraint_p_req)
                     #obj += model.dual_p_prev[e, y, d, p] * (constraint_p_prev)
-                    obj += (model.rho / 2) * (constraint_p_req_transm) ** 2
-                    obj += (model.rho / 2) * (constraint_p_req_distr) ** 2
+                    obj += (model.rho / 2) * (constraint_p_req) ** 2
                     #obj += (model.rho / 2) * (constraint_p_prev) ** 2
 
     model.objective.expr = obj
@@ -846,17 +841,13 @@ def update_shared_energy_storages_coordination_model_and_solve(planning_problem,
             for d in model.days:
                 day = days[d]
                 for p in model.periods:
-                    p_req_transm = ess_req['tso'][node_id][year][day]['p'][p]
-                    p_req_distr = ess_req['dso'][node_id][year][day]['p'][p]
+                    p_req = (ess_req['tso'][node_id][year][day]['p'][p] + ess_req['dso'][node_id][year][day]['p'][p]) * 0.50
                     #p_prev = ess_prev['esso'][node_id][year][day]['p'][p]
-                    dual_p_req_transm = dual_ess['esso']['tso'][node_id][year][day]['p'][p]
-                    dual_p_req_distr = dual_ess['esso']['dso'][node_id][year][day]['p'][p]
+                    dual_p_req = (dual_ess['esso']['tso'][node_id][year][day]['p'][p] + dual_ess['esso']['dso'][node_id][year][day]['p'][p]) * 0.50
                     #dual_p_prev = dual_ess['esso']['prev'][node_id][year][day]['p'][p]
-                    model.p_req_transm[e, y, d, p].fix(p_req_transm)
-                    model.p_req_distr[e, y, d, p].fix(p_req_distr)
+                    model.p_req[e, y, d, p].fix(p_req)
                     #model.p_prev[e, y, d, p].fix(p_prev)
-                    model.dual_p_req_transm[e, y, d, p].fix(dual_p_req_transm)
-                    model.dual_p_req_distr[e, y, d, p].fix(dual_p_req_distr)
+                    model.dual_p_req[e, y, d, p].fix(dual_p_req)
                     #model.dual_p_prev[e, y, d, p].fix(dual_p_prev)
 
     # Solve!
@@ -977,8 +968,8 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
         for year in planning_problem.years:
             for day in planning_problem.days:
                 for t in range(planning_problem.num_instants):
-                    error_p_tso = shared_ess_vars['tso'][node_id][year][day]['p'][t] - shared_ess_vars['esso'][node_id][year][day]['p'][p]
-                    error_p_dso = shared_ess_vars['dso'][node_id][year][day]['p'][t] - shared_ess_vars['esso'][node_id][year][day]['p'][p]
+                    error_p_tso = shared_ess_vars['tso'][node_id][year][day]['p'][t] - shared_ess_vars['dso'][node_id][year][day]['p'][p]
+                    error_p_dso = shared_ess_vars['dso'][node_id][year][day]['p'][t] - shared_ess_vars['tso'][node_id][year][day]['p'][p]
                     error_p_esso_tso = shared_ess_vars['esso'][node_id][year][day]['p'][p] - shared_ess_vars['tso'][node_id][year][day]['p'][t]
                     error_p_esso_dso = shared_ess_vars['esso'][node_id][year][day]['p'][p] - shared_ess_vars['dso'][node_id][year][day]['p'][t]
                     error_p_esso_prev = shared_ess_vars['esso'][node_id][year][day]['p'][p] - shared_ess_prev_vars['esso'][node_id][year][day]['p'][t]
