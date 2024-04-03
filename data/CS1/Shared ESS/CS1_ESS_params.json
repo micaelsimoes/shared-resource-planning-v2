@@ -11,7 +11,7 @@
 	"ess_relax_capacity_degradation": false,
 	"ess_relax_capacity_relative": false,
 	"ess_relax_secondary_reserve": true,
-	"ess_interface_relax": true,
+	"ess_interface_relax": false,
 	"ess_relax_apparent_power": false,
 	"print_results_to_file": true,
 	"solver": {
