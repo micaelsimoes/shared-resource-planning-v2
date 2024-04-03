@@ -962,7 +962,8 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
             for d in range(len(repr_days)):
                 day = repr_days[d]
                 s_base = distribution_network.network[year][day].baseMVA
-                shared_ess_idx = distribution_network.network[year][day].get_shared_energy_storage_idx(node_id)
+                ref_node_id = distribution_network.network[year][day].get_reference_node_id()
+                shared_ess_idx = distribution_network.network[year][day].get_shared_energy_storage_idx(ref_node_id)
                 capacity = pe.value(dso_model[year][day].shared_es_s_rated[shared_ess_idx]) * s_base
                 shared_ess_vars['dso'][node_id][year][day]['p'] = [0.0 for _ in range(planning_problem.num_instants)]
                 for p in dso_model[year][day].periods:
