@@ -814,7 +814,7 @@ def update_distribution_coordination_models_and_solve(distribution_networks, mod
 
                 # Update SHARED ENERGY STORAGE variables (if existent)
                 for p in model[year][day].periods:
-                    model[year][day].dual_ess_p[p].fix(dual_ess[node_id][year][day]['p'][p] / s_base)
+                    model[year][day].dual_ess_p[p].fix(dual_ess[node_id][year][day]['p'][p])
                     model[year][day].p_ess_req[p].fix(ess_req[node_id][year][day]['p'][p] / s_base)
 
         # Solve!
