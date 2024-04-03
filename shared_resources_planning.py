@@ -236,7 +236,7 @@ def _run_operational_planning(planning_problem, candidate_solution, debug_flag=F
         # 2. Solve TSO problem
         results['tso'] = update_transmission_coordination_model_and_solve(transmission_network, tso_model,
                                                                           consensus_vars['interface']['pf']['dso'], dual_vars['pf']['tso'],
-                                                                          consensus_vars['ess']['esso'], dual_vars['ess']['tso'],
+                                                                          consensus_vars['ess']['esso'], dual_vars['ess']['tso'], consensus_vars_prev_iter['ess']['tso'],
                                                                           admm_parameters, from_warm_start=from_warm_start)
 
         # 2.1 Update ADMM CONSENSUS variables
@@ -618,8 +618,11 @@ def update_transmission_model_to_admm(transmission_network, model, initial_inter
                     rating = 1.00       # Do not balance residuals
                 for p in model[year][day].periods:
                     constraint_ess_p = (model[year][day].expected_shared_ess_p[e, p] - model[year][day].p_ess_req[e, p]) / (2 * rating)
-                    obj += model[year][day].dual_ess_p[e, p] * constraint_ess_p
+                    constraint_ess_p_prev = (model[year][day].expected_shared_ess_p[e, p] - model[year][day].p_ess_prev[e, p]) / (2 * rating)
+                    obj += model[year][day].dual_ess_p_req[e, p] * constraint_ess_p
+                    obj += model[year][day].dual_ess_p_prev[e, p] * constraint_ess_p_prev
                     obj += (model[year][day].rho_ess / 2) * constraint_ess_p ** 2
+                    obj += (model[year][day].rho_ess / 2) * constraint_ess_p_prev ** 2
 
             model[year][day].objective.expr = obj
 
@@ -738,7 +741,7 @@ def update_shared_energy_storage_model_to_admm(shared_ess_data, model, params):
     return model
 
 
-def update_transmission_coordination_model_and_solve(transmission_network, model, pf_req, dual_pf, ess_req, dual_ess, params, from_warm_start=False):
+def update_transmission_coordination_model_and_solve(transmission_network, model, pf_req, dual_pf, ess_req, dual_ess, ess_prev, params, from_warm_start=False):
 
     print('[INFO] \t\t - Updating transmission network...')
 
@@ -771,8 +774,10 @@ def update_transmission_coordination_model_and_solve(transmission_network, model
                 # Update shared ESS capacity and power requests
                 shared_ess_idx = transmission_network.network[year][day].get_shared_energy_storage_idx(node_id)
                 for p in model[year][day].periods:
-                    model[year][day].dual_ess_p[shared_ess_idx, p].fix(dual_ess['current'][node_id][year][day]['p'][p] / s_base)
+                    model[year][day].dual_ess_p_req[shared_ess_idx, p].fix(dual_ess['current'][node_id][year][day]['p'][p] / s_base)
+                    model[year][day].dual_ess_p_prev[shared_ess_idx, p].fix(dual_ess['prev'][node_id][year][day]['p'][p] / s_base)
                     model[year][day].p_ess_req[shared_ess_idx, p].fix(ess_req[node_id][year][day]['p'][p] / s_base)
+                    model[year][day].p_ess_prev[shared_ess_idx, p].fix(ess_prev[node_id][year][day]['p'][p] / s_base)
 
     # Solve!
     res = transmission_network.optimize(model, from_warm_start=from_warm_start)
@@ -977,7 +982,6 @@ def _update_shared_energy_storage_variables(planning_problem, tso_model, dso_mod
             for d in range(len(repr_days)):
                 day = repr_days[d]
                 s_base = distribution_network.network[year][day].baseMVA
-                ref_node_id = distribution_network.network[year][day].get_reference_node_id()
                 shared_ess_vars['dso'][node_id][year][day]['p'] = [0.0 for _ in range(planning_problem.num_instants)]
                 for p in dso_model[year][day].periods:
                     shared_ess_vars['dso'][node_id][year][day]['p'][p] = pe.value(dso_model[year][day].expected_shared_ess_p[p]) * s_base
