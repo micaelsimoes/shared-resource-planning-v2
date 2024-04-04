@@ -96,6 +96,13 @@ class SharedEnergyStorageData:
                 candidate_solution['total_capacity'][node_id][year]['e'] = abs(pe.value(model.es_e_rated[e, y]))
         return candidate_solution
 
+    def get_initial_candidate_solution(self):
+        # Determine initial candidate solution by maximizing investment
+        model = self.build_master_problem()
+        model.objective.expr = -model.objective.expr
+        self.optimize(model)
+        return self.get_candidate_solution(model)
+
     def update_model_with_candidate_solution(self, model, candidate_solution):
         _update_model_with_candidate_solution(self, model, candidate_solution)
 
@@ -687,8 +694,6 @@ def _optimize(model, params, from_warm_start=False):
         solver.options['acceptable_iter'] = 5
         solver.options['max_iter'] = 10000
         solver.options['linear_solver'] = params.linear_solver
-        if params.linear_solver == 'ma57':
-            solver.options['ma57_automatic_scaling'] = 'no'
 
     result = solver.solve(model, tee=params.verbose)
 
