@@ -4,13 +4,13 @@
 	"min_pe_factor": 0.10,
 	"max_pe_factor": 1.00,
 	"ess_relax_comp": true,
-	"ess_relax_soc": true,
-	"ess_relax_day_balance": true,
+	"ess_relax_soc": false,
+	"ess_relax_day_balance": false,
 	"ess_relax_capacity_available": false,
 	"ess_relax_installed_capacity": false,
 	"ess_relax_capacity_degradation": false,
 	"ess_relax_capacity_relative": false,
-	"ess_relax_secondary_reserve": true,
+	"ess_relax_secondary_reserve": false,
 	"ess_interface_relax": true,
 	"ess_relax_apparent_power": true,
 	"print_results_to_file": true,
@@ -18,6 +18,6 @@
 		"name": "ipopt",
 		"linear_solver": "ma57",
 		"solver_tol": 1e-6,
-		"verbose": true
+		"verbose": false
 	}
 }
