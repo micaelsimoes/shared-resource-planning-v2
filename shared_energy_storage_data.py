@@ -151,8 +151,8 @@ def _build_master_problem(shared_ess_data):
 
     # ------------------------------------------------------------------------------------------------------------------
     # Decision variables
-    model.es_s_invesment = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)   # Investment in power capacity in year y
-    model.es_e_invesment = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)   # Investment in energy capacity in year y
+    model.es_s_investment = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)   # Investment in power capacity in year y
+    model.es_e_investment = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)   # Investment in energy capacity in year y
     model.es_s_rated = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)       # Total rated power capacity (considering calendar life)
     model.es_e_rated = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)       # Total rated energy capacity (considering calendar life, not considering degradation)
     model.alpha = pe.Var(domain=pe.Reals)                                                           # alpha (associated with cuts) will try to rebuild y in the original problem
@@ -173,8 +173,8 @@ def _build_master_problem(shared_ess_data):
             tcal_norm = round(shared_energy_storage.t_cal / num_years)
             max_tcal_norm = min(y + tcal_norm, len(shared_ess_data.years))
             for x in range(y, max_tcal_norm):
-                total_s_capacity_per_year[x] += model.es_s_invesment[e, y]
-                total_e_capacity_per_year[x] += model.es_e_invesment[e, y]
+                total_s_capacity_per_year[x] += model.es_s_investment[e, y]
+                total_e_capacity_per_year[x] += model.es_e_investment[e, y]
         for y in model.years:
             model.rated_s_capacity.add(model.es_s_rated[e, y] == total_s_capacity_per_year[y])
             model.rated_e_capacity.add(model.es_e_rated[e, y] == total_e_capacity_per_year[y])
@@ -201,8 +201,8 @@ def _build_master_problem(shared_ess_data):
         c_inv_e = shared_ess_data.cost_investment['energy_capacity'][year]
         annualization = 1 / ((1 + shared_ess_data.discount_factor) ** (int(year) - int(years[0])))
         for e in model.energy_storages:
-            investment_cost_total += annualization * model.es_s_invesment[e, y] * c_inv_s
-            investment_cost_total += annualization * model.es_e_invesment[e, y] * c_inv_e
+            investment_cost_total += annualization * model.es_s_investment[e, y] * c_inv_s
+            investment_cost_total += annualization * model.es_e_investment[e, y] * c_inv_e
     model.energy_storage_investment.add(investment_cost_total <= params.budget)
 
     # Benders' cuts
@@ -219,8 +219,8 @@ def _build_master_problem(shared_ess_data):
             annualization = 1 / ((1 + shared_ess_data.discount_factor) ** (int(year) - int(years[0])))
 
             # Investment Cost
-            investment_cost += annualization * model.es_s_invesment[e, y] * c_inv_s
-            investment_cost += annualization * model.es_e_invesment[e, y] * c_inv_e
+            investment_cost += annualization * model.es_s_investment[e, y] * c_inv_s
+            investment_cost += annualization * model.es_e_investment[e, y] * c_inv_e
 
     obj = investment_cost + model.alpha
     model.objective = pe.Objective(sense=pe.minimize, expr=obj)
