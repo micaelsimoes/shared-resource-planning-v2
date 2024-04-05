@@ -1279,40 +1279,38 @@ def _write_ess_capacity_available_to_excel(shared_ess_data, workbook, results):
 
     # Write investment values, power and energy
     for node_id in results:
+        for year in results[node_id]:
 
-        # Power capacity
-        col_idx = 1
-        row_idx = row_idx + 1
-        sheet.cell(row=row_idx, column=col_idx).value = node_id
-        col_idx = col_idx + 1
-        sheet.cell(row=row_idx, column=col_idx).value = 'S, [MVA]'
-        col_idx = col_idx + 1
-        for year in shared_ess_data.years:
-            sheet.cell(row=row_idx, column=col_idx).value = results[node_id][year]['power']
-            sheet.cell(row=row_idx, column=col_idx).number_format = num_style
-            col_idx = col_idx + 1
-
-        # Energy capacity
-        col_idx = 1
-        row_idx = row_idx + 1
-        sheet.cell(row=row_idx, column=col_idx).value = node_id
-        col_idx = col_idx + 1
-        sheet.cell(row=row_idx, column=col_idx).value = 'E, [MVAh]'
-        col_idx = col_idx + 1
-        for year in shared_ess_data.years:
-            sheet.cell(row=row_idx, column=col_idx).value = results[node_id][year]['energy']
-            sheet.cell(row=row_idx, column=col_idx).number_format = num_style
-            col_idx = col_idx + 1
-
-        # Degradation factor
-        if "degradation_factor" in results[node_id][year]:
+            # Power capacity
             col_idx = 1
             row_idx = row_idx + 1
             sheet.cell(row=row_idx, column=col_idx).value = node_id
             col_idx = col_idx + 1
-            sheet.cell(row=row_idx, column=col_idx).value = 'Degradation factor'
+            sheet.cell(row=row_idx, column=col_idx).value = 'S, [MVA]'
             col_idx = col_idx + 1
-            for year in shared_ess_data.years:
+            sheet.cell(row=row_idx, column=col_idx).value = results[node_id][year]['power']
+            sheet.cell(row=row_idx, column=col_idx).number_format = num_style
+            col_idx = col_idx + 1
+
+            # Energy capacity
+            col_idx = 1
+            row_idx = row_idx + 1
+            sheet.cell(row=row_idx, column=col_idx).value = node_id
+            col_idx = col_idx + 1
+            sheet.cell(row=row_idx, column=col_idx).value = 'E, [MVAh]'
+            col_idx = col_idx + 1
+            sheet.cell(row=row_idx, column=col_idx).value = results[node_id][year]['energy']
+            sheet.cell(row=row_idx, column=col_idx).number_format = num_style
+            col_idx = col_idx + 1
+
+            # Degradation factor
+            if "degradation_factor" in results[node_id][year]:
+                col_idx = 1
+                row_idx = row_idx + 1
+                sheet.cell(row=row_idx, column=col_idx).value = node_id
+                col_idx = col_idx + 1
+                sheet.cell(row=row_idx, column=col_idx).value = 'Degradation factor'
+                col_idx = col_idx + 1
                 sheet.cell(row=row_idx, column=col_idx).value = results[node_id][year]['degradation_factor']
                 sheet.cell(row=row_idx, column=col_idx).number_format = perc_style
                 col_idx = col_idx + 1
@@ -1526,7 +1524,7 @@ def _write_shared_energy_storage_results_to_excel(shared_ess_data, workbook, res
                             soc_perc = results[year][day]['scenarios'][s_m][s_o]['soc_percent'][node_id][p]
                             sheet.cell(row=row_idx, column=p + 7).value = soc_perc
                             sheet.cell(row=row_idx, column=p + 7).number_format = perc_style
-                            if soc != 'N/A':
+                            if soc_perc != 'N/A':
                                 expected_soc_perc[node_id][p] += soc_perc * omega_m * omega_s
                             else:
                                 expected_soc_perc[node_id][p] = 'N/A'
