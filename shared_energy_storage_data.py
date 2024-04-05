@@ -705,6 +705,8 @@ def _optimize(model, params, from_warm_start=False):
         solver.options['acceptable_iter'] = 5
         solver.options['max_iter'] = 10000
         solver.options['linear_solver'] = params.linear_solver
+        if params.linear_solver == 'ma57':
+            solver.options['ma57_small_pivot_flag'] = 1.0
 
     result = solver.solve(model, tee=params.verbose)
 
