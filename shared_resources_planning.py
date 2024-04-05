@@ -115,8 +115,8 @@ def _run_planning_problem(planning_problem):
     upper_bound = shared_ess_parameters.budget * 1e3
     lower_bound_evolution = [lower_bound]
     upper_bound_evolution = [upper_bound]
-    #candidate_solution = planning_problem.get_initial_candidate_solution_v2()
-    candidate_solution = planning_problem.shared_ess_data.get_initial_candidate_solution()
+    candidate_solution = planning_problem.get_initial_candidate_solution()
+    #candidate_solution = planning_problem.shared_ess_data.get_initial_candidate_solution()
 
     start = time.time()
     master_problem_model = planning_problem.shared_ess_data.build_master_problem()
@@ -4684,32 +4684,12 @@ def _get_initial_candidate_solution(planning_problem):
             candidate_solution['investment'][node_id][year]['s'] = 0.00
             candidate_solution['investment'][node_id][year]['e'] = 0.00
             if year == 2020 or year == 2040:
-                candidate_solution['investment'][node_id][year]['s'] = 0.00
-                candidate_solution['investment'][node_id][year]['e'] = 0.00
+                candidate_solution['investment'][node_id][year]['s'] = 1.00
+                candidate_solution['investment'][node_id][year]['e'] = 1.00
             candidate_solution['total_capacity'][node_id][year] = dict()
-            candidate_solution['total_capacity'][node_id][year]['s'] = 0.00
-            candidate_solution['total_capacity'][node_id][year]['e'] = 0.00
+            candidate_solution['total_capacity'][node_id][year]['s'] = 1.00
+            candidate_solution['total_capacity'][node_id][year]['e'] = 1.00
     return candidate_solution
-
-
-def _get_initial_candidate_solution_v2(planning_problem):
-
-
-
-    # Get candidate solution
-    candidate_solution = {'investment': {}, 'total_capacity': {}}
-    for e in model.energy_storages:
-        node_id = planning_problem.active_distribution_network_nodes[e]
-        candidate_solution['investment'][node_id] = dict()
-        candidate_solution['total_capacity'][node_id] = dict()
-        for y in model.years:
-            year = years[y]
-            candidate_solution['investment'][node_id][year] = dict()
-            candidate_solution['investment'][node_id][year]['s'] = abs(pe.value(model.es_s_investment[e, y]))
-            candidate_solution['investment'][node_id][year]['e'] = abs(pe.value(model.es_e_investment[e, y]))
-            candidate_solution['total_capacity'][node_id][year] = dict()
-            candidate_solution['total_capacity'][node_id][year]['s'] = abs(pe.value(model.es_s_rated[e, y]))
-            candidate_solution['total_capacity'][node_id][year]['e'] = abs(pe.value(model.es_e_rated[e, y]))
 
 
 def _print_candidate_solution(candidate_solution):
