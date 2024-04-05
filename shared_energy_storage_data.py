@@ -656,12 +656,13 @@ def _build_subproblem_model(shared_ess_data):
                         slack_penalty += PENALTY_ESS_EXPECTED_VALUES * (model.es_penalty_expected_p_up[e, y, d, p] + model.es_penalty_expected_p_down[e, y, d, p])
 
     if shared_ess_data.params.ess_relax_secondary_reserve:
-        for y in model.years:
-            for d in model.days:
-                for p in model.periods:
-                    slack_penalty += PENALTY_ESS_RESERVE * (model.es_penalty_pup_total_up[y, d, p] + model.es_penalty_pup_total_down[y, d, p])
-                    slack_penalty += PENALTY_ESS_RESERVE * (model.es_penalty_pdown_total_up[y, d, p] + model.es_penalty_pdown_total_down[y, d, p])
-                    slack_penalty += PENALTY_ESS_RESERVE * (model.es_penalty_reserve_splitting_up[y, d, p] + model.es_penalty_reserve_splitting_down[y, d, p])
+        for e in model.energy_storages:
+            for y in model.years:
+                for d in model.days:
+                    for p in model.periods:
+                        slack_penalty += PENALTY_ESS_RESERVE * (model.es_penalty_pup_total_up[e, y, d, p] + model.es_penalty_pup_total_down[e, y, d, p])
+                        slack_penalty += PENALTY_ESS_RESERVE * (model.es_penalty_pdown_total_up[e, y, d, p] + model.es_penalty_pdown_total_down[e, y, d, p])
+                        slack_penalty += PENALTY_ESS_RESERVE * (model.es_penalty_reserve_splitting_up[e, y, d, p] + model.es_penalty_reserve_splitting_down[e, y, d, p])
 
     obj = operational_cost + slack_penalty
     model.objective = pe.Objective(sense=pe.minimize, expr=obj)
