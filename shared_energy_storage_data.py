@@ -113,7 +113,7 @@ class SharedEnergyStorageData:
         return _compute_primal_value(self, model)
 
     def get_sensitivities(self, model):
-        return _get_sensitivities(model)
+        return _get_sensitivities(self, model)
 
     def get_shared_energy_storage_idx(self, node_id):
         repr_years = [year for year in self.years]
@@ -754,13 +754,18 @@ def _compute_primal_value(shared_ess_data, model):
     return obj
 
 
-def _get_sensitivities(model):
+def _get_sensitivities(shared_ess_data, model):
+
+    years = [year for year in shared_ess_data.years]
 
     sensitivities = dict()
 
     sensitivities['s'] = list()
-    for c in model.sensitivities_s:
-        sensitivities['s'].append(pe.value(model.dual[model.sensitivities_s[c]]))
+    for c, year in model.sensitivities_s, shared_ess_data.years:
+        num_years = shared_ess_data.years[year]
+        annualization = 1 / ((1 + shared_ess_data.discount_factor) ** (int(year) - int(years[0])))
+        sensitivity_s = pe.value(model.dual[model.sensitivities_s[c]])
+        sensitivities['s'].append(sensitivity_s * num_years * annualization)
 
     sensitivities['e'] = list()
     for c in model.sensitivities_e:
