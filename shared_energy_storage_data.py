@@ -707,6 +707,7 @@ def _optimize(model, params, from_warm_start=False):
         solver.options['linear_solver'] = params.linear_solver
         if params.linear_solver == 'ma57':
             solver.options['ma57_small_pivot_flag'] = 1
+            solver.options['ma57_pivtolmax'] = 0.01
 
     result = solver.solve(model, tee=params.verbose)
 
