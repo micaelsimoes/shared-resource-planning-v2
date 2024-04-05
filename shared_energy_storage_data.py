@@ -272,9 +272,6 @@ def _build_subproblem_model(shared_ess_data):
     model.es_e_investment = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)  # Invesment in energy capacity in year y (complicating variable)
     model.es_s_investment_fixed = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)  # Benders' -- used to get the dual variables (sensitivities)
     model.es_e_investment_fixed = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)  # (...)
-    model.es_e_capacity_available = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)  # Total Energy capacity available in year y (based on degradation)
-    #model.es_e_capacity_degradation = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals)  # Energy capacity degradation in year y (based on ESS utilization)
-    #model.es_e_relative_capacity = pe.Var(model.energy_storages, model.years, model.years, domain=pe.NonNegativeReals)  # Relative energy capacity available in year y (based on degradation)
     model.es_soc = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals)
     model.es_pch = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
     model.es_pdch = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
@@ -287,60 +284,6 @@ def _build_subproblem_model(shared_ess_data):
     model.slack_s_down = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)  # (...)
     model.slack_e_up = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)  # (...)
     model.slack_e_down = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)  # (...)
-    if shared_ess_data.params.ess_relax_comp:
-        model.es_penalty_comp = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals, initialize=0.0)
-    if shared_ess_data.params.ess_relax_soc:
-        model.es_penalty_soc_up = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_soc_down = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-    if shared_ess_data.params.ess_relax_day_balance:
-        model.es_penalty_day_balance_up = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_day_balance_down = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, domain=pe.NonNegativeReals, initialize=0.00)
-    '''
-    if shared_ess_data.params.ess_relax_capacity_available:
-        model.es_penalty_capacity_available_up = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_capacity_available_down = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.00)
-    '''
-    if shared_ess_data.params.ess_relax_installed_capacity:
-        model.es_penalty_s_rated_up = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)
-        model.es_penalty_s_rated_down = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)
-        model.es_penalty_e_rated_up = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)
-        model.es_penalty_e_rated_down = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)
-    '''
-    if shared_ess_data.params.ess_relax_capacity_degradation:
-        model.es_penalty_e_capacity_degradation_up = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)
-        model.es_penalty_e_capacity_degradation_down = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)
-    if shared_ess_data.params.ess_relax_capacity_relative:
-        model.es_penalty_e_relative_capacity_up = pe.Var(model.energy_storages, model.years, model.years, domain=pe.NonNegativeReals, initialize=0.0)
-        model.es_penalty_e_relative_capacity_down = pe.Var(model.energy_storages, model.years, model.years, domain=pe.NonNegativeReals, initialize=0.0)
-    '''
-    if shared_ess_data.params.ess_relax_secondary_reserve:
-        model.es_penalty_pup_total_up = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_pup_total_down = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_pdown_total_up = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_pdown_total_down = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_reserve_splitting_up = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_reserve_splitting_down = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-    if shared_ess_data.params.ess_interface_relax:
-        model.es_penalty_expected_p_up = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_expected_p_down = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-
-    '''
-    for e in model.energy_storages:
-        for y in model.years:
-            model.es_e_capacity_degradation[e, y].setub(1.00)
-            model.es_e_capacity_degradation[e, y].fix(1.00)
-            e_init = shared_ess_data.shared_energy_storages[repr_years[y]][e].e
-            for d in model.days:
-                for s_m in model.scenarios_market:
-                    for s_o in model.scenarios_operation:
-                        for p in model.periods:
-                            model.es_soc[e, y, d, s_m, s_o, p] = e_init * ENERGY_STORAGE_RELATIVE_INIT_SOC
-            for x in model.years:
-                model.es_e_relative_capacity[e, y, x].fix(0.00)
-                if shared_ess_data.params.ess_relax_capacity_relative:
-                    model.es_penalty_e_relative_capacity_up[e, y, x].fix(0.00)
-                    model.es_penalty_e_relative_capacity_down[e, y, x].fix(0.00)
-    '''
 
     # ------------------------------------------------------------------------------------------------------------------
     # Constraints
@@ -358,94 +301,10 @@ def _build_subproblem_model(shared_ess_data):
                 total_s_capacity_per_year[x] += model.es_s_investment[e, y]
                 total_e_capacity_per_year[x] += model.es_e_investment[e, y]
         for y in model.years:
-            if shared_ess_data.params.ess_relax_installed_capacity:
-                model.rated_s_capacity.add(model.es_s_rated[e, y] - total_s_capacity_per_year[y] == model.es_penalty_s_rated_up[e, y] - model.es_penalty_s_rated_down[e, y])
-                model.rated_s_capacity.add(model.es_e_rated[e, y] - total_e_capacity_per_year[y] == model.es_penalty_e_rated_up[e, y] - model.es_penalty_e_rated_down[e, y])
-            else:
-                model.rated_s_capacity.add(model.es_s_rated[e, y] - total_s_capacity_per_year[y] >= -SMALL_TOLERANCE)
-                model.rated_s_capacity.add(model.es_s_rated[e, y] - total_s_capacity_per_year[y] <= SMALL_TOLERANCE)
-                model.rated_e_capacity.add(model.es_e_rated[e, y] - total_e_capacity_per_year[y] >= -SMALL_TOLERANCE)
-                model.rated_e_capacity.add(model.es_e_rated[e, y] - total_e_capacity_per_year[y] <= SMALL_TOLERANCE)
-
-    # - Energy capacities available in year y (as a function of degradation)
-    '''
-    model.energy_storage_available_e_capacity = pe.ConstraintList()
-    for e in model.energy_storages:
-        for y in model.years:
-            capacity_e_available_year_y = model.es_e_investment[e, y] * model.es_e_relative_capacity[e, y, y]
-            for x in range(y - 1, -1, -1):
-                capacity_e_available_year_y += model.es_e_investment[e, x] * model.es_e_relative_capacity[e, x, y]
-            if shared_ess_data.params.ess_relax_capacity_available:
-                model.energy_storage_available_e_capacity.add(model.es_e_capacity_available[e, y] - capacity_e_available_year_y == model.es_penalty_capacity_available_up[e, y] - model.es_penalty_capacity_available_down[e, y])
-            else:
-                model.energy_storage_available_e_capacity.add(model.es_e_capacity_available[e, y] - capacity_e_available_year_y >= -SMALL_TOLERANCE)
-                model.energy_storage_available_e_capacity.add(model.es_e_capacity_available[e, y] - capacity_e_available_year_y <= SMALL_TOLERANCE)
-    '''
-
-    # - Yearly degradation
-    '''
-    model.energy_storage_yearly_degradation = pe.ConstraintList()
-    for e in model.energy_storages:
-        for y in model.years:
-
-            year = repr_years[y]
-            shared_energy_storage = shared_ess_data.shared_energy_storages[year][e]
-            cl_nom = shared_energy_storage.cl_nom
-            dod_nom = shared_energy_storage.dod_nom
-
-            total_ch_dch_day = 0.0
-            total_available_capacity = cl_nom * dod_nom * 2 * model.es_e_capacity_available[e, y]
-            for d in model.days:
-                day = repr_days[d]
-                num_days = shared_ess_data.days[day]
-                for s_m in model.scenarios_market:
-                    prob_market = shared_ess_data.prob_market_scenarios[s_m]
-                    for s_o in model.scenarios_operation:
-                        prob_operation = shared_ess_data.prob_operation_scenarios[s_o]
-                        for p in model.periods:
-                            pch = model.es_pch[e, y, d, s_m, s_o, p]
-                            pdch = model.es_pdch[e, y, d, s_m, s_o, p]
-                            pup = model.es_pup[e, y, d, s_m, s_o, p]
-                            pdown = model.es_pdown[e, y, d, s_m, s_o, p]
-                            r_up_activ = shared_ess_data.upward_activation[year][day][s_o][p]           # Share of downward reserve activation
-                            r_down_activ = shared_ess_data.downward_activation[year][day][s_o][p]       # Share of upward reserve activation
-                            total_ch_dch_day += (num_days / 365) * prob_market * prob_operation * (pch + pdch)
-                            total_ch_dch_day += (num_days / 365) * prob_market * prob_operation * (pup * r_up_activ + pdown * r_down_activ)
-            if shared_ess_data.params.ess_relax_capacity_degradation:
-                model.energy_storage_yearly_degradation.add(model.es_e_capacity_degradation[e, y] * total_available_capacity - total_ch_dch_day == model.es_penalty_e_capacity_degradation_up[e, y] - model.es_penalty_e_capacity_degradation_down[e, y])
-            else:
-                model.energy_storage_yearly_degradation.add(model.es_e_capacity_degradation[e, y] * total_available_capacity - total_ch_dch_day >= -SMALL_TOLERANCE)
-                model.energy_storage_yearly_degradation.add(model.es_e_capacity_degradation[e, y] * total_available_capacity - total_ch_dch_day <= SMALL_TOLERANCE)
-    '''
-
-    # - Relative energy capacity
-    # - Reflects the degradation of the capacity invested on ESS e in year Y at year X ahead
-    '''
-    model.energy_storage_relative_e_capacity = pe.ConstraintList()
-    for e in model.energy_storages:
-        for y in model.years:
-
-            year = repr_years[y]
-            shared_energy_storage = shared_ess_data.shared_energy_storages[year][e]
-            tcal_norm = round(shared_energy_storage.t_cal / shared_ess_data.years[repr_years[y]])
-            max_tcal_norm = min(y + tcal_norm, len(shared_ess_data.years))
-
-            # - Relative capacity
-            relative_capacity_year_y_in_x = 1.0
-            model.es_e_capacity_degradation[e, y].fixed = False
-            model.es_e_relative_capacity[e, y, y].fix(relative_capacity_year_y_in_x)
-            for x in range(y + 1, max_tcal_norm):
-                model.es_e_capacity_degradation[e, x].fixed = False
-                model.es_e_relative_capacity[e, y, x].fixed = False
-                relative_capacity_year_y_in_x *= (1 - model.es_e_capacity_degradation[e, x - 1]) ** (total_days * shared_ess_data.years[repr_years[y]])          # Relative capacity in year y reflects the accumulated degradation
-                if shared_ess_data.params.ess_relax_capacity_relative:
-                    model.es_penalty_e_relative_capacity_up[e, y, x].fixed = False
-                    model.es_penalty_e_relative_capacity_down[e, y, x].fixed = False
-                    model.energy_storage_relative_e_capacity.add(model.es_e_relative_capacity[e, y, x] - relative_capacity_year_y_in_x == model.es_penalty_e_relative_capacity_up[e, y, x] - model.es_penalty_e_relative_capacity_down[e, y, x])
-                else:
-                    model.energy_storage_relative_e_capacity.add(model.es_e_relative_capacity[e, y, x] - relative_capacity_year_y_in_x >= -SMALL_TOLERANCE)
-                    model.energy_storage_relative_e_capacity.add(model.es_e_relative_capacity[e, y, x] - relative_capacity_year_y_in_x <= SMALL_TOLERANCE)
-    '''
+            model.rated_s_capacity.add(model.es_s_rated[e, y] - total_s_capacity_per_year[y] >= -SMALL_TOLERANCE)
+            model.rated_s_capacity.add(model.es_s_rated[e, y] - total_s_capacity_per_year[y] <= SMALL_TOLERANCE)
+            model.rated_e_capacity.add(model.es_e_rated[e, y] - total_e_capacity_per_year[y] >= -SMALL_TOLERANCE)
+            model.rated_e_capacity.add(model.es_e_rated[e, y] - total_e_capacity_per_year[y] <= SMALL_TOLERANCE)
 
     # - P, Q, S, SoC, Pup and Pdown as a function of available capacities
     model.energy_storage_limits = pe.ConstraintList()
@@ -459,8 +318,8 @@ def _build_subproblem_model(shared_ess_data):
                             model.energy_storage_limits.add(model.es_pdch[e, y, d, s_m, s_o, p] <= model.es_s_rated[e, y])
                             model.energy_storage_limits.add(model.es_pup[e, y, d, s_m, s_o, p] <= model.es_s_rated[e, y])
                             model.energy_storage_limits.add(model.es_pdown[e, y, d, s_m, s_o, p] <= model.es_s_rated[e, y])
-                            model.energy_storage_limits.add(model.es_soc[e, y, d, s_m, s_o, p] >= model.es_e_capacity_available[e, y] * ENERGY_STORAGE_MIN_ENERGY_STORED)
-                            model.energy_storage_limits.add(model.es_soc[e, y, d, s_m, s_o, p] <= model.es_e_capacity_available[e, y] * ENERGY_STORAGE_MAX_ENERGY_STORED)
+                            model.energy_storage_limits.add(model.es_soc[e, y, d, s_m, s_o, p] >= model.es_e_rated[e, y] * ENERGY_STORAGE_MIN_ENERGY_STORED)
+                            model.energy_storage_limits.add(model.es_soc[e, y, d, s_m, s_o, p] <= model.es_e_rated[e, y] * ENERGY_STORAGE_MAX_ENERGY_STORED)
 
     # - Shared ESS operation
     model.energy_storage_operation = pe.ConstraintList()
@@ -478,10 +337,10 @@ def _build_subproblem_model(shared_ess_data):
 
             sch_max = model.es_s_rated[e, y] * ENERGY_STORAGE_MAX_POWER_CHARGING
             sdch_max = model.es_s_rated[e, y] * ENERGY_STORAGE_MAX_POWER_DISCHARGING
-            soc_max = model.es_e_capacity_available[e, y] * ENERGY_STORAGE_MAX_ENERGY_STORED
-            soc_min = model.es_e_capacity_available[e, y] * ENERGY_STORAGE_MIN_ENERGY_STORED
-            soc_init = model.es_e_capacity_available[e, y] * ENERGY_STORAGE_RELATIVE_INIT_SOC
-            soc_final = model.es_e_capacity_available[e, y] * ENERGY_STORAGE_RELATIVE_INIT_SOC
+            soc_max = model.es_e_rated[e, y] * ENERGY_STORAGE_MAX_ENERGY_STORED
+            soc_min = model.es_e_rated[e, y] * ENERGY_STORAGE_MIN_ENERGY_STORED
+            soc_init = model.es_e_rated[e, y] * ENERGY_STORAGE_RELATIVE_INIT_SOC
+            soc_final = model.es_e_rated[e, y] * ENERGY_STORAGE_RELATIVE_INIT_SOC
 
             for d in model.days:
                 for s_m in model.scenarios_market:
@@ -494,25 +353,15 @@ def _build_subproblem_model(shared_ess_data):
                             pdown = model.es_pdown[e, y, d, s_m, s_o, p]
 
                             if p > 0:
-                                if shared_ess_data.params.ess_relax_soc:
-                                    model.energy_storage_balance.add(model.es_soc[e, y, d, s_m, s_o, p] - model.es_soc[e, y, d, s_m, s_o, p - 1] - (pch * eff_charge - pdch / eff_discharge) == model.es_penalty_soc_up[e, y, d, s_m, s_o, p] - model.es_penalty_soc_down[e, y, d, s_m, s_o, p])
-                                else:
-                                    model.energy_storage_balance.add(model.es_soc[e, y, d, s_m, s_o, p] - model.es_soc[e, y, d, s_m, s_o, p - 1] - (pch * eff_charge - pdch / eff_discharge) >= -SMALL_TOLERANCE)
-                                    model.energy_storage_balance.add(model.es_soc[e, y, d, s_m, s_o, p] - model.es_soc[e, y, d, s_m, s_o, p - 1] - (pch * eff_charge - pdch / eff_discharge) <= SMALL_TOLERANCE)
+                                model.energy_storage_balance.add(model.es_soc[e, y, d, s_m, s_o, p] - model.es_soc[e, y, d, s_m, s_o, p - 1] - (pch * eff_charge - pdch / eff_discharge) >= -SMALL_TOLERANCE)
+                                model.energy_storage_balance.add(model.es_soc[e, y, d, s_m, s_o, p] - model.es_soc[e, y, d, s_m, s_o, p - 1] - (pch * eff_charge - pdch / eff_discharge) <= SMALL_TOLERANCE)
                             else:
-                                if shared_ess_data.params.ess_relax_soc:
-                                    model.energy_storage_balance.add(model.es_soc[e, y, d, s_m, s_o, p] - soc_init - (pch * eff_charge - pdch / eff_discharge) == model.es_penalty_soc_up[e, y, d, s_m, s_o, p] - model.es_penalty_soc_down[e, y, d, s_m, s_o, p])
-                                else:
-                                    model.energy_storage_balance.add(model.es_soc[e, y, d, s_m, s_o, p] - soc_init - (pch * eff_charge - pdch / eff_discharge) >= -SMALL_TOLERANCE)
-                                    model.energy_storage_balance.add(model.es_soc[e, y, d, s_m, s_o, p] - soc_init - (pch * eff_charge - pdch / eff_discharge) <= SMALL_TOLERANCE)
+                                model.energy_storage_balance.add(model.es_soc[e, y, d, s_m, s_o, p] - soc_init - (pch * eff_charge - pdch / eff_discharge) >= -SMALL_TOLERANCE)
+                                model.energy_storage_balance.add(model.es_soc[e, y, d, s_m, s_o, p] - soc_init - (pch * eff_charge - pdch / eff_discharge) <= SMALL_TOLERANCE)
 
                             # Charging/discharging complementarity constraint
-                            if shared_ess_data.params.ess_relax_comp:
-                                model.energy_storage_ch_dch_exclusion.add(pch * pdch <= model.es_penalty_comp[e, y, d, s_m, s_o, p])
-                            else:
-                                # NLP formulation
-                                model.energy_storage_ch_dch_exclusion.add(pch * pdch >= -SMALL_TOLERANCE)
-                                model.energy_storage_ch_dch_exclusion.add(pch * pdch <= SMALL_TOLERANCE)
+                            model.energy_storage_ch_dch_exclusion.add(pch * pdch >= -SMALL_TOLERANCE)
+                            model.energy_storage_ch_dch_exclusion.add(pch * pdch <= SMALL_TOLERANCE)
 
                             # Secondary reserve -- Bands bounds
                             model.secondary_reserve.add(pdown <= sdch_max - pdch)
@@ -533,11 +382,8 @@ def _build_subproblem_model(shared_ess_data):
                                 capacity_remaining += model.es_s_rated[e, y] - model.es_pch[e, y, d, s_m, s_o, t] - model.es_pdch[e, y, d, s_m, s_o, t]
                             model.secondary_reserve.add(pup_remaining + pdown_remaining <= capacity_remaining / 2.0)
 
-                        if shared_ess_data.params.ess_relax_day_balance:
-                            model.energy_storage_day_balance.add(model.es_soc[e, y, d, s_m, s_o, len(model.periods) - 1] - soc_final == model.es_penalty_day_balance_up[e, y, d, s_m, s_o] - model.es_penalty_day_balance_down[e, y, d, s_m, s_o])
-                        else:
-                            model.energy_storage_day_balance.add(model.es_soc[e, y, d, s_m, s_o, len(model.periods) - 1] - soc_final >= -SMALL_TOLERANCE)
-                            model.energy_storage_day_balance.add(model.es_soc[e, y, d, s_m, s_o, len(model.periods) - 1] - soc_final <= SMALL_TOLERANCE)
+                        model.energy_storage_day_balance.add(model.es_soc[e, y, d, s_m, s_o, len(model.periods) - 1] - soc_final >= -SMALL_TOLERANCE)
+                        model.energy_storage_day_balance.add(model.es_soc[e, y, d, s_m, s_o, len(model.periods) - 1] - soc_final <= SMALL_TOLERANCE)
 
             # Expected P and Q
             for d in model.days:
@@ -548,11 +394,8 @@ def _build_subproblem_model(shared_ess_data):
                         for s_o in model.scenarios_operation:
                             prob_oper_scn = shared_ess_data.prob_operation_scenarios[s_o]
                             expected_p += (model.es_pch[e, y, d, s_m, s_o, p] - model.es_pdch[e, y, d, s_m, s_o, p]) * prob_market_scn * prob_oper_scn
-                    if shared_ess_data.params.ess_interface_relax:
-                        model.energy_storage_expected_power.add(model.es_expected_p[e, y, d, p] - expected_p == model.es_penalty_expected_p_up[e, y, d, p] - model.es_penalty_expected_p_down[e, y, d, p])
-                    else:
-                        model.energy_storage_expected_power.add(model.es_expected_p[e, y, d, p] - expected_p >= -SMALL_TOLERANCE)
-                        model.energy_storage_expected_power.add(model.es_expected_p[e, y, d, p] - expected_p <= SMALL_TOLERANCE)
+                    model.energy_storage_expected_power.add(model.es_expected_p[e, y, d, p] - expected_p >= -SMALL_TOLERANCE)
+                    model.energy_storage_expected_power.add(model.es_expected_p[e, y, d, p] - expected_p <= SMALL_TOLERANCE)
 
     # - Secondary Reserve
     for e in model.energy_storages:
@@ -630,57 +473,9 @@ def _build_subproblem_model(shared_ess_data):
                             operational_cost -= annualization * num_years * num_days * prob_market * prob_operation * (c_r_ter_up[year][day][s_m][p] * pup * r_up_activ)         # Revenue secondary reserve upward activation (negative)
                             operational_cost -= annualization * num_years * num_days * prob_market * prob_operation * (c_r_ter_down[year][day][s_m][p] * pdown * r_down_activ)   # Revenue secondary reserve downward activation (negative)
 
-                            if shared_ess_data.params.ess_relax_comp:
-                                slack_penalty += PENALTY_ESS_COMPLEMENTARITY * model.es_penalty_comp[e, y, d, s_m, s_o, p]
-
-                            if shared_ess_data.params.ess_relax_soc:
-                                slack_penalty += PENALTY_ESS_SOC * (model.es_penalty_soc_up[e, y, d, s_m, s_o, p] + model.es_penalty_soc_down[e, y, d, s_m, s_o, p])
-
-                        if shared_ess_data.params.ess_relax_day_balance:
-                            slack_penalty += PENALTY_ESS_DAY_BALANCE * (model.es_penalty_day_balance_up[e, y, d, s_m, s_o] + model.es_penalty_day_balance_down[e, y, d, s_m, s_o])
-
             # Slack penalties
             slack_penalty += PENALTY_ESS_SLACK_FEASIBILITY * (model.slack_s_up[e, y] + model.slack_s_down[e, y])
             slack_penalty += PENALTY_ESS_SLACK_FEASIBILITY * (model.slack_e_up[e, y] + model.slack_e_down[e, y])
-
-            # Capacity available penalties
-            '''
-            if shared_ess_data.params.ess_relax_capacity_available:
-                slack_penalty += PENALTY_ESS_CAPACITY_AVAILABLE * (model.es_penalty_capacity_available_up[e, y] + model.es_penalty_capacity_available_down[e, y])
-            '''
-
-            # Installed capacity penalties
-            if shared_ess_data.params.ess_relax_installed_capacity:
-                slack_penalty += PENALTY_ESS_CAPACITY_INSTALLED * (model.es_penalty_s_rated_up[e, y] + model.es_penalty_s_rated_down[e, y])
-                slack_penalty += PENALTY_ESS_CAPACITY_INSTALLED * (model.es_penalty_e_rated_up[e, y] + model.es_penalty_e_rated_down[e, y])
-
-            # Capacity degradation penalties
-            '''
-            if shared_ess_data.params.ess_relax_capacity_degradation:
-                slack_penalty += PENALTY_ESS_CAPACITY_DEGRADATION * (model.es_penalty_e_capacity_degradation_up[e, y] + model.es_penalty_e_capacity_degradation_down[e, y])
-            '''
-
-            # Relative capacity penalties
-            '''
-            if shared_ess_data.params.ess_relax_capacity_relative:
-                for x in model.years:
-                    slack_penalty += PENALTY_ESS_CAPACITY_RELATIVE * (model.es_penalty_e_relative_capacity_up[e, y, x] + model.es_penalty_e_relative_capacity_down[e, y, x])
-            '''
-
-            # Expected active power
-            if shared_ess_data.params.ess_interface_relax:
-                for d in model.days:
-                    for p in model.periods:
-                        slack_penalty += PENALTY_ESS_EXPECTED_VALUES * (model.es_penalty_expected_p_up[e, y, d, p] + model.es_penalty_expected_p_down[e, y, d, p])
-
-    if shared_ess_data.params.ess_relax_secondary_reserve:
-        for e in model.energy_storages:
-            for y in model.years:
-                for d in model.days:
-                    for p in model.periods:
-                        slack_penalty += PENALTY_ESS_RESERVE * (model.es_penalty_pup_total_up[e, y, d, p] + model.es_penalty_pup_total_down[e, y, d, p])
-                        slack_penalty += PENALTY_ESS_RESERVE * (model.es_penalty_pdown_total_up[e, y, d, p] + model.es_penalty_pdown_total_down[e, y, d, p])
-                        slack_penalty += PENALTY_ESS_RESERVE * (model.es_penalty_reserve_splitting_up[e, y, d, p] + model.es_penalty_reserve_splitting_down[e, y, d, p])
 
     obj = operational_cost + slack_penalty
     model.objective = pe.Objective(sense=pe.minimize, expr=obj)
@@ -976,7 +771,8 @@ def _process_results(shared_ess_data, model):
 
                     for e in model.energy_storages:
                         node_id = shared_ess_data.shared_energy_storages[year][e].bus
-                        capacity_available = pe.value(model.es_e_capacity_available[e, y])
+                        #capacity_available = pe.value(model.es_e_capacity_available[e, y])
+                        capacity_available = pe.value(model.es_e_rated[e, y])
                         if not isclose(capacity_available, 0.0, abs_tol=1e-3):
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['p'][node_id] = []
                             processed_results['results'][year][day]['scenarios'][s_m][s_o]['p_up'][node_id] = []
@@ -1009,83 +805,6 @@ def _process_results(shared_ess_data, model):
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['slack_s_down'][node_id] = pe.value(model.slack_s_down[e, y])
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['slack_e_up'][node_id] = pe.value(model.slack_e_up[e, y])
                         processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['slack_e_down'][node_id] = pe.value(model.slack_e_down[e, y])
-
-                        if shared_ess_data.params.ess_relax_comp:
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['comp'][node_id] = []
-                            for p in model.periods:
-                                comp = pe.value(model.es_penalty_comp[e, y, d, s_m, s_o, p])
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['comp'][node_id].append(comp)
-
-                        if shared_ess_data.params.ess_relax_soc:
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_up'][node_id] = []
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_down'][node_id] = []
-                            for p in model.periods:
-                                soc_up = pe.value(model.es_penalty_soc_up[e, y, d, s_m, s_o, p])
-                                soc_down = pe.value(model.es_penalty_soc_down[e, y, d, s_m, s_o, p])
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_up'][node_id].append(soc_up)
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['soc_down'][node_id].append(soc_down)
-
-                        if shared_ess_data.params.ess_relax_day_balance:
-                            balance_up = pe.value(model.es_penalty_day_balance_up[e, y, d, s_m, s_o])
-                            balance_down = pe.value(model.es_penalty_day_balance_down[e, y, d, s_m, s_o])
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_up'][node_id] = balance_up
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['day_balance_down'][node_id] = balance_down
-
-                        '''
-                        if shared_ess_data.params.ess_relax_capacity_available:
-                            capacity_available_up = pe.value(model.es_penalty_capacity_available_up[e, y])
-                            capacity_available_down = pe.value(model.es_penalty_capacity_available_down[e, y])
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_available_up'][node_id] = capacity_available_up
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_available_down'][node_id] = capacity_available_down
-                        '''
-
-                        if shared_ess_data.params.ess_relax_installed_capacity:
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['s_rated_up'][node_id] = pe.value(model.es_penalty_s_rated_up[e, y])
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['s_rated_down'][node_id] = pe.value(model.es_penalty_s_rated_down[e, y])
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['e_rated_up'][node_id] = pe.value(model.es_penalty_e_rated_up[e, y])
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['e_rated_down'][node_id] = pe.value(model.es_penalty_e_rated_down[e, y])
-
-                        if shared_ess_data.params.ess_relax_capacity_degradation:
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_up'][node_id] = pe.value(model.es_penalty_e_capacity_degradation_up[e, y])
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['capacity_degradation_down'][node_id] = pe.value(model.es_penalty_e_capacity_degradation_down[e, y])
-
-                        if shared_ess_data.params.ess_relax_capacity_relative:
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_up'][node_id] = dict()
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'][node_id] = dict()
-                            for y2 in model.years:
-                                year2 = repr_years[y2]
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_up'][node_id][year2] = pe.value(model.es_penalty_e_relative_capacity_up[e, y, y2])
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['relative_capacity_down'][node_id][year2] = pe.value(model.es_penalty_e_relative_capacity_down[e, y, y2])
-
-                        if shared_ess_data.params.ess_relax_secondary_reserve:
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_up'][node_id] = []
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_down'][node_id] = []
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pdown_total_up'][node_id] = []
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pdown_total_down'][node_id] = []
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_up'][node_id] = []
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_down'][node_id] = []
-                            for p in model.periods:
-                                pup_total_up = pe.value(model.es_penalty_pup_total_up[y, d, p])
-                                pup_total_down = pe.value(model.es_penalty_pup_total_down[y, d, p])
-                                pdown_total_up = pe.value(model.es_penalty_pdown_total_up[y, d, p])
-                                pdown_total_down = pe.value(model.es_penalty_pdown_total_down[y, d, p])
-                                reserve_splitting_up = pe.value(model.es_penalty_reserve_splitting_up[y, d, p])
-                                reserve_splitting_down = pe.value(model.es_penalty_reserve_splitting_down[y, d, p])
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_up'][node_id].append(pup_total_up)
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pup_total_down'][node_id].append(pup_total_down)
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pdown_total_up'][node_id].append(pdown_total_up)
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['pdown_total_down'][node_id].append(pdown_total_down)
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_up'][node_id].append(reserve_splitting_up)
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['reserve_splitting_down'][node_id].append(reserve_splitting_down)
-
-                        if shared_ess_data.params.ess_interface_relax:
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['expected_p_up'][node_id] = []
-                            processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['expected_p_down'][node_id] = []
-                            for p in model.periods:
-                                expected_p_up = pe.value(model.es_penalty_expected_p_up[e, y, d, p])
-                                expected_p_down = pe.value(model.es_penalty_expected_p_down[e, y, d, p])
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['expected_p_up'][node_id].append(expected_p_up)
-                                processed_results['results'][year][day]['scenarios'][s_m][s_o]['relaxation_slacks']['expected_p_down'][node_id].append(expected_p_down)
 
     return processed_results
 
@@ -1147,7 +866,8 @@ def _get_investment_and_available_capacities(shared_ess_data, model):
 
             ess_capacity['available'][node_id][year] = dict()
             ess_capacity['available'][node_id][year]['power'] = pe.value(model.es_s_rated[e, y])
-            ess_capacity['available'][node_id][year]['energy'] = pe.value(model.es_e_capacity_available[e, y])
+            ess_capacity['available'][node_id][year]['energy'] = pe.value(model.es_e_rated[e, y])
+            #ess_capacity['available'][node_id][year]['energy'] = pe.value(model.es_e_capacity_available[e, y])
             #ess_capacity['available'][node_id][year]['degradation_factor'] = pe.value(model.es_e_capacity_degradation[e, y])
 
     return ess_capacity
@@ -1166,9 +886,11 @@ def _write_optimization_results_to_excel(shared_ess_data, data_dir, results, sha
     _write_secondary_reserve_bands_to_excel(shared_ess_data, wb, results['results'])
     _write_market_cost_values_to_excel(shared_ess_data, wb)
     _write_shared_energy_storage_results_to_excel(shared_ess_data, wb, results['results'])
+    '''
     _write_relaxation_slacks_results_to_excel(shared_ess_data, wb, results['results'])
     if shared_ess_data.params.ess_relax_capacity_relative:
         _write_relaxation_slacks_yoy_results_to_excel(shared_ess_data, wb, results)
+    '''
 
     results_filename = os.path.join(data_dir, f'{shared_ess_data.name}_shared_ess_results.xlsx')
     try:
