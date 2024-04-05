@@ -679,7 +679,7 @@ def _build_subproblem_model(shared_ess_data):
 
 def _optimize(model, params, from_warm_start=False):
 
-    solver = po.SolverFactory(params.solver, executable=params.solver_path)
+    solver = po.SolverFactory(params.solver)
 
     if from_warm_start:
         model.ipopt_zL_in.update(model.ipopt_zL_out)
