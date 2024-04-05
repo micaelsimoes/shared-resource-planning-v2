@@ -80,9 +80,6 @@ class SharedResourcesPlanning:
     def get_initial_candidate_solution(self):
         return _get_initial_candidate_solution(self)
 
-    def get_initial_candidate_solution_v2(self):
-        return _get_initial_candidate_solution_v2(self)
-
     def write_operational_planning_results_to_excel(self, optimization_models, results, primal_evolution=list()):
         filename = os.path.join(self.results_dir, self.name + '_operational_planning_results.xlsx')
         processed_results = _process_operational_planning_results(self, optimization_models['tso'], optimization_models['dso'], optimization_models['esso'], results)
