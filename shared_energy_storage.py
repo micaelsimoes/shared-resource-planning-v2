@@ -17,4 +17,4 @@ class SharedEnergyStorage:
         self.min_pf = -0.80                 # Minimum power factor
         self.t_cal = 20                     # Calendar life of the ESS, [years]
         self.cl_nom = 10000                 # Cycle life, nominal, [number of cycles]
-        self.dod_nom = 0.80                 # Depth-of-Discharge, nominal, [0-1]
+        self.dod_nom = 0.95                 # Depth-of-Discharge, nominal, [0-1]
