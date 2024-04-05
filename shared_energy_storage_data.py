@@ -281,8 +281,8 @@ def _build_subproblem_model(shared_ess_data):
     model.es_pup = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
     model.es_pdown = pe.Var(model.energy_storages, model.years, model.days, model.scenarios_market, model.scenarios_operation, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
     model.es_expected_p = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.Reals, initialize=0.00)
-    model.pup_total = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-    model.pdown_total = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+    model.pup_total = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+    model.pdown_total = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
     model.slack_s_up = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)  # Benders' -- ensures feasibility of the subproblem (numerical issues)
     model.slack_s_down = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)  # (...)
     model.slack_e_up = pe.Var(model.energy_storages, model.years, domain=pe.NonNegativeReals, initialize=0.0)  # (...)
@@ -310,12 +310,12 @@ def _build_subproblem_model(shared_ess_data):
         model.es_penalty_e_relative_capacity_up = pe.Var(model.energy_storages, model.years, model.years, domain=pe.NonNegativeReals, initialize=0.0)
         model.es_penalty_e_relative_capacity_down = pe.Var(model.energy_storages, model.years, model.years, domain=pe.NonNegativeReals, initialize=0.0)
     if shared_ess_data.params.ess_relax_secondary_reserve:
-        model.es_penalty_pup_total_up = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_pup_total_down = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_pdown_total_up = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_pdown_total_down = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_reserve_splitting_up = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
-        model.es_penalty_reserve_splitting_down = pe.Var(model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_pup_total_up = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_pup_total_down = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_pdown_total_up = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_pdown_total_down = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_reserve_splitting_up = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
+        model.es_penalty_reserve_splitting_down = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
     if shared_ess_data.params.ess_interface_relax:
         model.es_penalty_expected_p_up = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
         model.es_penalty_expected_p_down = pe.Var(model.energy_storages, model.years, model.days, model.periods, domain=pe.NonNegativeReals, initialize=0.00)
@@ -543,30 +543,30 @@ def _build_subproblem_model(shared_ess_data):
                         model.energy_storage_expected_power.add(model.es_expected_p[e, y, d, p] - expected_p <= SMALL_TOLERANCE)
 
     # - Secondary Reserve
-    for y in model.years:
-        for d in model.days:
-            for p in model.periods:
-                pup_period = 0.0
-                pdown_period = 0.0
-                for s_m in model.scenarios_market:
-                    prob_market = shared_ess_data.prob_market_scenarios[s_m]
-                    for s_o in model.scenarios_operation:
-                        prob_operation = shared_ess_data.prob_operation_scenarios[s_o]
-                        for e in model.energy_storages:
+    for e in model.energy_storages:
+        for y in model.years:
+            for d in model.days:
+                for p in model.periods:
+                    pup_period = 0.0
+                    pdown_period = 0.0
+                    for s_m in model.scenarios_market:
+                        prob_market = shared_ess_data.prob_market_scenarios[s_m]
+                        for s_o in model.scenarios_operation:
+                            prob_operation = shared_ess_data.prob_operation_scenarios[s_o]
                             pup_period += prob_market * prob_operation * model.es_pup[e, y, d, s_m, s_o, p]
                             pdown_period += prob_market * prob_operation * model.es_pdown[e, y, d, s_m, s_o, p]
 
-                if shared_ess_data.params.ess_relax_secondary_reserve:
-                    model.secondary_reserve.add(model.pup_total[y, d, p] - pup_period == model.es_penalty_pup_total_up[y, d, p] - model.es_penalty_pup_total_down[y, d, p])
-                    model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period == model.es_penalty_pdown_total_up[y, d, p] - model.es_penalty_pdown_total_down[y, d, p])
-                    model.secondary_reserve.add(model.pup_total[y, d, p] - 2 * model.pdown_total[y, d, p] == model.es_penalty_reserve_splitting_up[y, d, p] - model.es_penalty_reserve_splitting_down[y, d, p])
-                else:
-                    model.secondary_reserve.add(model.pup_total[y, d, p] - pup_period >= -SMALL_TOLERANCE)
-                    model.secondary_reserve.add(model.pup_total[y, d, p] - pup_period <= SMALL_TOLERANCE)
-                    model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period >= -SMALL_TOLERANCE)
-                    model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period <= SMALL_TOLERANCE)
-                    model.secondary_reserve.add(model.pup_total[y, d, p] - 2 * model.pdown_total[y, d, p] >= -SMALL_TOLERANCE)
-                    model.secondary_reserve.add(model.pup_total[y, d, p] - 2 * model.pdown_total[y, d, p] <= SMALL_TOLERANCE)
+                    if shared_ess_data.params.ess_relax_secondary_reserve:
+                        model.secondary_reserve.add(model.pup_total[e, y, d, p] - pup_period == model.es_penalty_pup_total_up[e, y, d, p] - model.es_penalty_pup_total_down[e, y, d, p])
+                        model.secondary_reserve.add(model.pdown_total[e, y, d, p] - pdown_period == model.es_penalty_pdown_total_up[e, y, d, p] - model.es_penalty_pdown_total_down[e, y, d, p])
+                        model.secondary_reserve.add(model.pup_total[e, y, d, p] - 2 * model.pdown_total[e, y, d, p] == model.es_penalty_reserve_splitting_up[e, y, d, p] - model.es_penalty_reserve_splitting_down[e, y, d, p])
+                    else:
+                        model.secondary_reserve.add(model.pup_total[e, y, d, p] - pup_period >= -SMALL_TOLERANCE)
+                        model.secondary_reserve.add(model.pup_total[e, y, d, p] - pup_period <= SMALL_TOLERANCE)
+                        model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period >= -SMALL_TOLERANCE)
+                        model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period <= SMALL_TOLERANCE)
+                        model.secondary_reserve.add(model.pup_total[e, y, d, p] - 2 * model.pdown_total[e, y, d, p] >= -SMALL_TOLERANCE)
+                        model.secondary_reserve.add(model.pup_total[e, y, d, p] - 2 * model.pdown_total[e, y, d, p] <= SMALL_TOLERANCE)
 
     # - Sensitivities - Einv and Sinv as a function of Einv_fixed and Sinv_fixed
     model.sensitivities_s = pe.ConstraintList()
