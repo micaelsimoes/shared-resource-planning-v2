@@ -116,6 +116,7 @@ def _run_planning_problem(planning_problem):
     #candidate_solution = planning_problem.shared_ess_data.get_initial_candidate_solution()
 
     model = shared_ess_data.build_subproblem()
+    shared_ess_data.update_model_with_candidate_solution(model, candidate_solution)
     shared_ess_data.optimize(model)
     shared_ess_data.get_sensitivities(model)
 
