@@ -405,6 +405,7 @@ def _build_subproblem_model(shared_ess_data):
     for e in model.energy_storages:
         for y in model.years:
 
+            year = repr_years[y]
             shared_energy_storage = shared_ess_data.shared_energy_storages[year][e]
             tcal_norm = round(shared_energy_storage.t_cal / shared_ess_data.years[repr_years[y]])
             max_tcal_norm = min(y + tcal_norm, len(shared_ess_data.years))
@@ -768,7 +769,7 @@ def _get_sensitivities(shared_ess_data, model):
             num_years = shared_ess_data.years[year]
             annualization = 1 / ((1 + shared_ess_data.discount_factor) ** (int(year) - int(years[0])))
             sensitivity_s = pe.value(model.dual[model.sensitivities_s[c]])
-            sensitivities['s'].append(sensitivity_s)
+            sensitivities['s'].append(sensitivity_s * num_years * 365 * annualization)
 
     sensitivities['e'] = list()
     for e in model.energy_storages:
@@ -778,7 +779,7 @@ def _get_sensitivities(shared_ess_data, model):
             num_years = shared_ess_data.years[year]
             annualization = 1 / ((1 + shared_ess_data.discount_factor) ** (int(year) - int(years[0])))
             sensitivity_e = pe.value(model.dual[model.sensitivities_e[c]])
-            sensitivities['e'].append(sensitivity_e)
+            sensitivities['e'].append(sensitivity_e * num_years * 365 * annualization)
 
     return sensitivities
 
