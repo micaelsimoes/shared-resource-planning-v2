@@ -106,6 +106,15 @@ class SharedEnergyStorageData:
     def update_model_with_candidate_solution(self, model, candidate_solution):
         _update_model_with_candidate_solution(self, model, candidate_solution)
 
+    def update_data_with_candidate_solution(self, candidate_solution):
+        for year in self.years:
+            for shared_ess in self.shared_energy_storages[year]:
+                shared_ess.s = candidate_solution[shared_ess.bus][year]['s']
+                shared_ess.e = candidate_solution[shared_ess.bus][year]['e']
+                shared_ess.e_init = candidate_solution[shared_ess.bus][year]['e'] * ENERGY_STORAGE_RELATIVE_INIT_SOC
+                shared_ess.e_min = candidate_solution[shared_ess.bus][year]['e'] * ENERGY_STORAGE_MIN_ENERGY_STORED
+                shared_ess.e_max = candidate_solution[shared_ess.bus][year]['e'] * ENERGY_STORAGE_MAX_ENERGY_STORED
+
     def process_results(self, model):
         return _process_results(self, model)
 

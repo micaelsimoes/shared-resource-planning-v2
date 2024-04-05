@@ -543,6 +543,7 @@ def create_shared_energy_storage_model(shared_ess_data, sess_vars, candidate_sol
     years = [year for year in shared_ess_data.years]
     days = [day for day in shared_ess_data.days]
 
+    shared_ess_data.update_data_with_candidate_solution(candidate_solution)
     esso_model = shared_ess_data.build_subproblem()
     shared_ess_data.update_model_with_candidate_solution(esso_model, candidate_solution)
     shared_ess_data.optimize(esso_model)
