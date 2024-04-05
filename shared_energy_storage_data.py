@@ -563,8 +563,8 @@ def _build_subproblem_model(shared_ess_data):
                     else:
                         model.secondary_reserve.add(model.pup_total[e, y, d, p] - pup_period >= -SMALL_TOLERANCE)
                         model.secondary_reserve.add(model.pup_total[e, y, d, p] - pup_period <= SMALL_TOLERANCE)
-                        model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period >= -SMALL_TOLERANCE)
-                        model.secondary_reserve.add(model.pdown_total[y, d, p] - pdown_period <= SMALL_TOLERANCE)
+                        model.secondary_reserve.add(model.pdown_total[e, y, d, p] - pdown_period >= -SMALL_TOLERANCE)
+                        model.secondary_reserve.add(model.pdown_total[e, y, d, p] - pdown_period <= SMALL_TOLERANCE)
                         model.secondary_reserve.add(model.pup_total[e, y, d, p] - 2 * model.pdown_total[e, y, d, p] >= -SMALL_TOLERANCE)
                         model.secondary_reserve.add(model.pup_total[e, y, d, p] - 2 * model.pdown_total[e, y, d, p] <= SMALL_TOLERANCE)
 
