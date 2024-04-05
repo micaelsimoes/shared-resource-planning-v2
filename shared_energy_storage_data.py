@@ -768,7 +768,7 @@ def _get_sensitivities(shared_ess_data, model):
             year = years[y]
             num_years = shared_ess_data.years[year]
             annualization = 1 / ((1 + shared_ess_data.discount_factor) ** (int(year) - int(years[0])))
-            sensitivity_s = pe.value(model.dual[model.sensitivities_s[c]])
+            sensitivity_s = pe.value(model.dual[model.sensitivities_s[c]] / (num_years * annualization))
             sensitivities['s'].append(sensitivity_s)
 
     sensitivities['e'] = list()
@@ -778,7 +778,7 @@ def _get_sensitivities(shared_ess_data, model):
             year = years[y]
             num_years = shared_ess_data.years[year]
             annualization = 1 / ((1 + shared_ess_data.discount_factor) ** (int(year) - int(years[0])))
-            sensitivity_e = pe.value(model.dual[model.sensitivities_e[c]])
+            sensitivity_e = pe.value(model.dual[model.sensitivities_e[c]] / (num_years * annualization))
             sensitivities['e'].append(sensitivity_e)
 
     return sensitivities
