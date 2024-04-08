@@ -64,7 +64,7 @@ def shared_resources_planning(working_directory, specification_filename):
 
     candidate_solution = planning_problem.get_initial_candidate_solution()
     planning_problem.run_operational_planning(candidate_solution=candidate_solution, print_results=True, debug_flag=False)
-    #planning_problem.run_without_coordination(print_results=True)
+    planning_problem.run_without_coordination(print_results=True)
 
     '''
     transmission_network = planning_problem.transmission_network
@@ -84,6 +84,7 @@ def shared_resources_planning(working_directory, specification_filename):
         processed_results = distribution_network.process_results(dn_model, results)
         distribution_network.write_optimization_results_to_excel(processed_results)
     '''
+
     '''
     #candidate_solution = planning_problem.shared_ess_data.get_initial_candidate_solution()
     candidate_solution = planning_problem.get_initial_candidate_solution()
